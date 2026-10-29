@@ -25,7 +25,11 @@ export type Case = {
   widersprueche: Contradiction[]; beziehungen: Relation[]; tatkomplexe: Tatkomplex[]; fristen: FristTermin[]; offene_fragen: OffeneFrage[]; warnungen: string[]
 }
 export type Table = { title: string; cols: string[]; rows: { id: string; doc: string | null; cells: (string | number)[] }[] }
-export type CaseData = { case: Case; suspects: Record<string, boolean>; tables: Record<string, Table>; layout: Record<string, unknown> }
+export type BoardRolle = { id: string; rolle: string }
+export type BoardSeite = { bezeichnung: string; haupt: string[]; vertreter: BoardRolle[]; zeugen: BoardRolle[] }
+export type BoardBeweis = { person: string; doc_id: string | null; bezeichnung: string; fundstellen: Fundstelle[] }
+export type BoardStruktur = { verfahrensart: 'zivil' | 'straf'; aktiv: BoardSeite; passiv: BoardSeite; weitere: BoardRolle[]; beweismittel: BoardBeweis[] }
+export type CaseData = { case: Case; board?: BoardStruktur; suspects: Record<string, boolean>; tables: Record<string, Table>; layout: Record<string, unknown> }
 export type Marks = { fmt: string; page: number | null; boxes: { page: number; x: number; y: number; w: number; h: number }[]; found: string[]; missing: string[] }
 export type CaseInfo = { id: string; name: string; dokumente: number; personen: number; widersprueche: number }
 

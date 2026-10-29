@@ -113,3 +113,54 @@ AKTENINHALT:
 
 Nur JSON nach diesem Schema:
 {json.dumps(Review.model_json_schema(), ensure_ascii=False)}"""
+
+
+def board_prompt(case: Case) -> str:
+    import re
+
+    from .schemas import BoardStruktur
+
+    texte, rest = [], 40000
+    for d in case.dokumente:
+        if not re.search(r"klage|erwiderung|replik|duplik|schriftsatz|anklage|strafanzeige|anzeige",
+                         f"{d.doc_type} {d.title}", re.I):
+            continue
+        zeilen = []
+        for l in d.text_lines:
+            zeile = f"[{l.anchor}] {l.text}\n"
+            if len(zeile) > rest:
+                break
+            zeilen.append(zeile)
+            rest -= len(zeile)
+        if zeilen:
+            texte.append({"doc_id": d.id, "text": "".join(zeilen)})
+    data = {
+        "personen": [{"id": p.id, "name": p.name, "rollen": p.rollen,
+                      "dokumente": sorted({f.doc_id for f in p.fundstellen})} for p in case.personen],
+        "entitaeten": [{"id": e.id, "label": e.label, "typ": e.typ} for e in case.entitaeten],
+        "beziehungen": [r.model_dump() for r in case.beziehungen],
+        "dokumente": [{"id": d.id, "doc_type": d.doc_type, "title": d.title,
+                       "essentialia": d.essentialia} for d in case.dokumente],
+        "parteischriftsaetze": texte,
+    }
+    return f"""Ordne das Beweisboard ausschließlich nach Akteninhalt, ohne Wertung.
+- Zivil: aktiv = Klägerseite, passiv = Beklagtenseite.
+- Straf: aktiv = Staatsanwaltschaft und anzeigende/geschädigte Person oder Firma;
+  passiv = Beschuldigte/Angeklagte/Angeschuldigte.
+- Vertreter: Prozessbevollmächtigte, Kanzlei, Verteidiger; bei der Anklage die Staatsanwältin.
+- Zeugen gehören zu der Seite, die sie benennt bzw. für die sie aussagen. Suche insbesondere
+  Beweisangebote („Zeugnis …“, „Beweis: …“) in den Schriftsätzen. Straf: Zeugen aus Anzeige
+  und Anklage sind aktiv. Bei unklarer Zuordnung unter weitere belassen.
+- Richter und reines Justizpersonal kommen nirgends vor. Alle übrigen Beteiligten mit Bezug
+  zum Geschehen unter weitere. Jede ID nur einmal: haupt vor vertreter vor zeugen vor weitere.
+- Beweismittel: je Person die Aktenstücke bzw. benannten Beweise, die sich auf sie beziehen.
+  Möglichst doc_id setzen, sonst Bezeichnung laut Akte, etwa „Anlage K 35 (Chatverlauf)“.
+  Verfügung, Beschluss, Ladung, Zustellung und andere reine Verfahrensdokumente sind keine Beweise.
+- Nur vorhandene Personen-/Entitäts-IDs und Dokument-IDs verwenden. Nichts erfinden,
+  nur Zeilenanker aus der Akte; ohne verfügbaren Anker keine Zeile ergänzen. Keine Wertung.
+
+AKTENINHALT:
+{json.dumps(data, ensure_ascii=False)}
+
+Nur JSON nach diesem Schema:
+{json.dumps(BoardStruktur.model_json_schema(), ensure_ascii=False)}"""

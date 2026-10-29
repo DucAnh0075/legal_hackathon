@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import review, store, view
+from . import board, review, store, view
 from .agent import run
 from .export_xlsx import export
 from .tables import build
@@ -84,7 +84,7 @@ def cases():
 def get_case(case_id: str):
     c = _case(case_id)
     return {"case": c, "tables": build(c, store.get_annotations(case_id)), "layout": store.get_layout(case_id),
-            "suspects": store.get_suspects(case_id)}
+            "suspects": store.get_suspects(case_id), "board": board.load(c)}
 
 
 @app.get("/api/cases/{case_id}/files/{doc_id}")

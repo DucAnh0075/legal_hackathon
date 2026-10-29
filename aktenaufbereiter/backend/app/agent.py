@@ -146,6 +146,14 @@ async def run(folder: Path, case_id: str, name: str | None = None, progress: Pro
         await review(store.load_case(case_id), progress)
     except Exception as e:
         progress(f"Review fehlgeschlagen: {e}")
+    try:
+        from . import board, review as review_cache, view
+
+        sicht = gespeichert.model_copy(deep=True)
+        view.apply(sicht, review_cache.load(case_id))
+        await board.build_board(sicht, progress)
+    except Exception as e:
+        progress(f"Beweisboard fehlgeschlagen: {e}")
     for f in (store.case_dir(case_id) / "extraktionen").glob("_kons_*.json"):
         f.unlink()  # Teilkonsolidierungen gelten nur bis zum erfolgreichen Abschluss
     progress(f"gespeichert ({len(case.warnungen)} Validierungshinweise)")

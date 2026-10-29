@@ -8,6 +8,8 @@
   --line: oklch(87% 0.01 85);
   --accent: oklch(40% 0.1 255);
   --accent-soft: oklch(92% 0.03 255);
+  --side-a: oklch(55% 0.15 255);
+  --side-b: oklch(52% 0.19 27);
   --thread: oklch(52% 0.19 27);
   --thread-soft: oklch(93% 0.04 27);
   --s-belegt: oklch(46% 0.09 165);
@@ -32,6 +34,8 @@
   --line: oklch(33% 0.014 260);
   --accent: oklch(76% 0.1 250);
   --accent-soft: oklch(30% 0.05 255);
+  --side-a: oklch(73% 0.13 255);
+  --side-b: oklch(68% 0.18 27);
   --thread: oklch(68% 0.18 27);
   --thread-soft: oklch(30% 0.06 27);
   --s-belegt: oklch(72% 0.1 165);
@@ -256,3 +260,19 @@ table.t { border-collapse: separate; border-spacing: 0; width: 100%; }
 .thread-label.contra { border-color: var(--thread); }
 .thread-label.dim { opacity: 0.15; }
 .thread-label:hover, .thread-label:focus-visible { border-color: var(--thread); outline: 2px solid var(--thread); outline-offset: 2px; }
+
+/* Seiten des Beweisboards */
+.side-a { --side: var(--side-a); }
+.side-b { --side: var(--side-b); }
+.card.haupt { border: 3px solid var(--side); border-top-width: 10px; }
+.card.haupt .photo { background: color-mix(in oklch, var(--side) 15%, var(--surface)); color: var(--side); }
+.card.haupt .pin { background: var(--side); }
+.card.vertreter, .card.zeugen { border-left: 4px solid var(--side); }
+.party-tag { display: block; color: var(--side); font-weight: 600; margin: 4px 0; }
+.board-heading { color: var(--side); background: var(--surface); border-top: 4px solid var(--side); padding: 12px 16px; font: 600 18px var(--serif); pointer-events: none; }
+.boardwrap .react-flow__edge.side-a .react-flow__edge-path { stroke: var(--side-a); stroke-width: 2; }
+.boardwrap .react-flow__edge.side-b .react-flow__edge-path { stroke: var(--side-b); stroke-width: 2; }
+.boardwrap .react-flow__edge.main .react-flow__edge-path { stroke-width: 4; }
+.boardwrap .react-flow__edge.evidence .react-flow__edge-path { stroke: var(--muted); stroke-width: 2; }
+.boardwrap .react-flow__edge.relation .react-flow__edge-path { stroke: var(--thread); stroke-width: 1.5; }
+.boardbar { max-width: calc(100% - 24px); }

@@ -286,3 +286,30 @@ class ReviewWiderspruch(BaseModel):
 class Review(BaseModel):
     beziehungen: list[ReviewBeziehung] = []
     widersprueche: list[ReviewWiderspruch] = []
+
+
+class BoardRolle(BaseModel):
+    id: str
+    rolle: str
+
+
+class BoardSeite(BaseModel):
+    bezeichnung: str
+    haupt: list[str] = []
+    vertreter: list[BoardRolle] = []
+    zeugen: list[BoardRolle] = []
+
+
+class BoardBeweis(BaseModel):
+    person: str
+    doc_id: str | None = None
+    bezeichnung: str
+    fundstellen: list[Fundstelle] = []
+
+
+class BoardStruktur(BaseModel):
+    verfahrensart: Literal["zivil", "straf"]
+    aktiv: BoardSeite
+    passiv: BoardSeite
+    weitere: list[BoardRolle] = []
+    beweismittel: list[BoardBeweis] = []

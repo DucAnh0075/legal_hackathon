@@ -7,11 +7,23 @@ from .ingest import assign_blatt, ingest
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["ingest", "process", "review"])
+    ap.add_argument("cmd", choices=["ingest", "process", "review", "board"])
     ap.add_argument("folder", nargs="?")
     ap.add_argument("--case", default="fall")
     ap.add_argument("--name")
     args = ap.parse_args()
+    if args.cmd == "board":
+        import asyncio
+
+        from . import board, review, store, view
+
+        case = store.load_case(args.case)
+        if case is None:
+            ap.error("Fall nicht gefunden")
+        view.apply(case, review.load(case.id))
+        struktur = asyncio.run(board.build_board(case))
+        print(struktur.model_dump_json(indent=2))
+        return
     if args.cmd == "review":
         import asyncio
         from collections import Counter
