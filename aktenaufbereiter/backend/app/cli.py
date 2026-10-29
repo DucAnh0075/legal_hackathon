@@ -7,11 +7,38 @@ from .ingest import assign_blatt, ingest
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["ingest", "process", "review", "board"])
+    ap.add_argument("cmd", choices=["ingest", "process", "review", "board", "pool", "sammelakte"])
     ap.add_argument("folder", nargs="?")
     ap.add_argument("--case", default="fall")
     ap.add_argument("--name")
     args = ap.parse_args()
+    if args.cmd == "sammelakte":
+        import asyncio
+
+        from . import sammelakte, store
+
+        if not args.folder:
+            ap.error("Massenverfahren-ID für sammelakte erforderlich")
+        case_id = asyncio.run(sammelakte.create(args.folder))
+        print(store.case_dir(case_id) / "case.json")
+        return
+    if args.cmd == "pool":
+        import asyncio
+
+        from . import pool
+
+        asyncio.run(pool.refresh())
+        sicht = pool.pool_view()
+        for g in sicht["massenverfahren"]:
+            print(f"{g['id']}  {g['sache']}")
+            for m in g["mitglieder"]:
+                datum = m["klageeingang"] or {}
+                print(f"  {m['case_id']}  {m['name']}  {datum.get('anzeige') or 'Eingang unbekannt'}"
+                      + (f" – {datum['hinweis']}" if datum.get("hinweis") else ""))
+        print("Einzelakten:")
+        for c in sicht["einzel"]:
+            print(f"  {c['id']}  {c['name']}")
+        return
     if args.cmd == "board":
         import asyncio
 

@@ -59,6 +59,7 @@ class Document(BaseModel):
     needs_vision: bool = False  # Bild oder PDF ohne Textschicht
     aus_sammelakte: bool = False  # aus einer mehrseitigen PDF gegliedert; blatt_von/bis = PDF-Seiten
     blatt_hand: str | None = None  # handschriftliche Blattangabe, z. B. "1–3"
+    quelle_akte: str | None = None  # nur in Sammelakten: Fall-ID des Einzelverfahrens
 
 
 class PageScan(BaseModel):
@@ -261,11 +262,59 @@ class ConsRest(BaseModel):
     offene_fragen: list[OffeneFrage] = []
 
 
+# ---- Aktenpool: Massenverfahren ---------------------------------------------
+
+class Merkmal(BaseModel):
+    art: str  # z. B. "Flugnummer", "Flugdatum", "Produkt", "Charge", "Rückruf"
+    wert: str
+    fundstellen: list[Fundstelle] = []
+
+
+class FallProfil(BaseModel):
+    """Kurzprofil einer Akte für den Abgleich im Pool; nur Akteninhalt."""
+    verfahrensart: Literal["zivil", "straf", "unklar"] = "unklar"
+    aktivseite: list[str] = []  # Kläger, Anzeigende, Anklage
+    gegenseite: list[str] = []  # Beklagte, Beschuldigte
+    gegenstand: str = ""
+    merkmale: list[Merkmal] = []
+    klageeingang: DateValue | None = None  # Eingang der Klage/Anzeige bei Gericht
+    klageeingang_fundstelle: Fundstelle | None = None
+
+
+class PoolGruppe(BaseModel):
+    sache: str  # kurze Bezeichnung, z. B. "Flug NB 4711 vom 14.11.2025"
+    gemeinsamkeiten: list[str] = []
+    mitglieder: list[str] = []  # Fall-IDs
+
+
+class PoolGruppen(BaseModel):
+    gruppen: list[PoolGruppe] = []
+
+
+class Einzelverfahren(BaseModel):
+    buchstabe: str  # Dokumentpräfix in der Sammelakte (A, B, ...)
+    case_id: str
+    name: str
+    aktivseite: list[str] = []
+    gegenseite: list[str] = []
+    klageeingang: DateValue | None = None
+    klageeingang_fundstelle: Fundstelle | None = None
+    merkmale: list[Merkmal] = []
+
+
+class MassenverfahrenInfo(BaseModel):
+    mv_id: str
+    sache: str
+    gemeinsamkeiten: list[str] = []
+    verfahren: list[Einzelverfahren] = []
+
+
 class Case(Consolidation):
     id: str
     name: str
     dokumente: list[Document] = []
     warnungen: list[str] = Field(default_factory=list)  # Validierungsbefunde
+    massenverfahren: MassenverfahrenInfo | None = None  # nur bei Sammelakten
 
 
 class Annotation(BaseModel):

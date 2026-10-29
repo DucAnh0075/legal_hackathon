@@ -5,14 +5,15 @@ import json
 import shutil
 import uuid
 from pathlib import Path
+from typing import Awaitable, Callable
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import board, review, store, view
-from .agent import run
+from . import board, pool, review, sammelakte, store, view
+from .agent import Progress, run
 from .export_xlsx import export
 from .tables import build
 from .marks import find_marks, marked_pdf
@@ -30,13 +31,38 @@ def _case(case_id: str):
     return c
 
 
-async def _job(job: str, folder: Path, case_id: str, name: str | None) -> None:
+async def _job(job: str, work: Callable[[Progress], Awaitable]) -> None:
     q = jobs[job]
     try:
-        await run(folder, case_id, name, progress=lambda m: q.put_nowait({"msg": m}))
+        await work(lambda m: q.put_nowait({"msg": m}))
         q.put_nowait({"done": True})
     except Exception as e:  # noqa: BLE001
         q.put_nowait({"error": str(e)})
+
+
+async def _start(work: Callable[[Progress], Awaitable]) -> str:
+    job = uuid.uuid4().hex
+    jobs[job] = asyncio.Queue()
+    asyncio.create_task(_job(job, work))
+    return job
+
+
+@app.get("/api/pool")
+def get_pool():
+    return pool.pool_view()
+
+
+@app.post("/api/pool/refresh")
+async def refresh_pool():
+    return {"job": await _start(pool.refresh)}
+
+
+@app.post("/api/pool/{mv_id}/sammelakte")
+async def create_sammelakte(mv_id: str):
+    if not any(g["id"] == mv_id for g in pool.load()):
+        raise HTTPException(404, "Massenverfahren nicht gefunden")
+    job = await _start(lambda progress: sammelakte.create(mv_id, progress))
+    return {"job": job, "case_id": pool.sammel_id(mv_id)}
 
 
 @app.post("/api/cases")
@@ -52,10 +78,14 @@ async def create_case(case_id: str = Form(...), name: str | None = Form(None), f
         src.mkdir()
         for f in files:
             (src / Path(f.filename or "x").name).write_bytes(await f.read())
-    job = uuid.uuid4().hex
-    jobs[job] = asyncio.Queue()
-    asyncio.create_task(_job(job, src, case_id, name))
-    return {"job": job}
+    async def verarbeiten(progress: Progress):
+        await run(src, case_id, name, progress=progress)
+        try:
+            await pool.refresh(progress)
+        except Exception as e:
+            progress(f"Pool-Prüfung fehlgeschlagen: {e}")
+
+    return {"job": await _start(verarbeiten)}
 
 
 @app.get("/api/jobs/{job}/events")

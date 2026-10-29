@@ -5,7 +5,7 @@ export type Representation = { format: 'md' | 'pdf_text' | 'pdf_image' | 'image'
 export type Doc = {
   id: string; title: string; doc_type: string; format: Representation['format']; representations: Representation[]
   blatt_von?: number | null; blatt_bis?: number | null; dokumentdatum?: DateValue | null; eingangsdatum?: DateValue | null
-  essentialia: string; text_lines: TextLine[]; aus_sammelakte?: boolean; blatt_hand?: string | null
+  quelle_akte?: string | null; essentialia: string; text_lines: TextLine[]; aus_sammelakte?: boolean; blatt_hand?: string | null
 }
 export type Person = { id: string; name: string; aliases: string[]; adresse: string; rollen: string[]; fundstellen: Fundstelle[] }
 export type Entity = { id: string; typ: string; label: string; details?: string | null; fundstellen: Fundstelle[] }
@@ -20,7 +20,14 @@ export type Relation = { id: string; von: string; beziehung: string; zu: string;
 export type Tatkomplex = { id: string; label: string; vorwurf_laut_akte: string; zeitraum: string; personen: string[]; beweismittel: string[] }
 export type FristTermin = { id: string; art: string; datum?: DateValue | null; beschreibung: string; fundstellen: Fundstelle[] }
 export type OffeneFrage = { id: string; frage: string; fundstellen: Fundstelle[] }
+export type Merkmal = { art: string; wert: string; fundstellen: Fundstelle[] }
+export type Mitglied = { case_id: string; name: string; klageeingang?: DateValue | null; klageeingang_fundstelle?: Fundstelle | null; aktivseite: string[]; gegenseite: string[]; merkmale: Merkmal[] }
+export type Massenverfahren = { id: string; sache: string; gemeinsamkeiten: string[]; mitglieder: Mitglied[]; sammelakte_id: string | null; neue_mitglieder: string[] }
+export type Pool = { einzel: CaseInfo[]; massenverfahren: Massenverfahren[] }
+export type Einzelverfahren = Mitglied & { buchstabe: string }
+export type MassenverfahrenInfo = { mv_id: string; sache: string; gemeinsamkeiten: string[]; verfahren: Einzelverfahren[] }
 export type Case = {
+  massenverfahren?: MassenverfahrenInfo | null;
   id: string; name: string; dokumente: Doc[]; personen: Person[]; entitaeten: Entity[]; ereignisse: Ev[]
   widersprueche: Contradiction[]; beziehungen: Relation[]; tatkomplexe: Tatkomplex[]; fristen: FristTermin[]; offene_fragen: OffeneFrage[]; warnungen: string[]
 }
@@ -31,13 +38,16 @@ export type BoardBeweis = { person: string; doc_id: string | null; bezeichnung: 
 export type BoardStruktur = { verfahrensart: 'zivil' | 'straf'; aktiv: BoardSeite; passiv: BoardSeite; weitere: BoardRolle[]; beweismittel: BoardBeweis[] }
 export type CaseData = { case: Case; board?: BoardStruktur; suspects: Record<string, boolean>; tables: Record<string, Table>; layout: Record<string, unknown> }
 export type Marks = { fmt: string; page: number | null; boxes: { page: number; x: number; y: number; w: number; h: number }[]; found: string[]; missing: string[] }
-export type CaseInfo = { id: string; name: string; dokumente: number; personen: number; widersprueche: number }
+export type CaseInfo = { sammelakte?: boolean; id: string; name: string; dokumente: number; personen: number; widersprueche: number }
 
 const j = async <T,>(r: Response): Promise<T> => {
   if (!r.ok) throw new Error((await r.text()) || r.statusText)
   return r.json()
 }
 export const api = {
+  pool: () => fetch('/api/pool').then((r) => j<Pool>(r)),
+  refreshPool: () => fetch('/api/pool/refresh', { method: 'POST' }).then((r) => j<{ job: string }>(r)),
+  createSammelakte: (mvId: string) => fetch(`/api/pool/${encodeURIComponent(mvId)}/sammelakte`, { method: 'POST' }).then((r) => j<{ job: string; case_id: string }>(r)),
   cases: () => fetch('/api/cases').then((r) => j<CaseInfo[]>(r)),
   get: (id: string) => fetch(`/api/cases/${id}`).then((r) => j<CaseData>(r)),
   annotate: (id: string, row: string, field: 'kanzlei' | 'mandant', value: string) =>

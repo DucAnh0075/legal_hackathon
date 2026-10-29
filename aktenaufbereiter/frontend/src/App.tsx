@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { api, type CaseData, type CaseInfo } from './api'
+import { api, type CaseData, type Pool } from './api'
+import { Massenverfahren } from './Massenverfahren'
 import { Board } from './Board'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
@@ -8,7 +9,7 @@ import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
-type View = 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
+type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
 
 const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
@@ -29,7 +30,8 @@ const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseDa
 ]
 
 export default function App() {
-  const [cases, setCases] = useState<CaseInfo[]>([])
+  const [pool, setPool] = useState<Pool | null>(null)
+  const [mvId, setMvId] = useState<string | null>(null)
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
   const [view, setView] = useState<View>('start')
@@ -45,7 +47,10 @@ export default function App() {
   }, [job?.busy])
 
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light' }, [dark])
-  const refresh = useCallback(() => api.cases().then(setCases).catch(() => setCases([])), [])
+  const refresh = useCallback(() => Promise.all([
+    api.cases().catch(() => []),
+    api.pool().then(setPool).catch(() => setPool({ einzel: [], massenverfahren: [] })),
+  ]), [])
   useEffect(() => { refresh() }, [refresh])
 
   const load = useCallback(async (id: string, v: View = 'akte') => {
@@ -53,20 +58,22 @@ export default function App() {
   }, [refresh])
 
   // Agentenlauf: Fortschritt per SSE, unabhängig von der gerade offenen Ansicht
-  const startJob = useCallback((jobId: string, id: string) => {
+  const startJob = useCallback((jobId: string, id: string, open = true) => {
     setJob({ caseId: id, log: [], busy: true, error: '', started: Date.now() })
     const es = new EventSource(`/api/jobs/${jobId}/events`)
     es.onmessage = (m) => {
       const ev = JSON.parse(m.data)
       if (ev.msg) setJob((j) => j && { ...j, log: [...j.log, ev.msg] })
-      if (ev.error) { es.close(); setJob((j) => j && { ...j, busy: false, error: ev.error }) }
-      if (ev.done) { es.close(); setJob((j) => j && { ...j, busy: false }); load(id) }
+      if (ev.error) { es.close(); setJob((j) => j && { ...j, busy: false, error: ev.error }); refresh() }
+      if (ev.done) { es.close(); setJob((j) => j && { ...j, busy: false }); refresh(); if (open) load(id).catch((err) => setJob((j) => j && { ...j, error: String(err) })) }
     }
-    es.onerror = () => { es.close(); setJob((j) => j && { ...j, busy: false, error: j.error || 'Verbindung zum Agenten unterbrochen.' }) }
-  }, [load])
+    es.onerror = () => { es.close(); setJob((j) => j && { ...j, busy: false, error: j.error || 'Verbindung zum Agenten unterbrochen.' }); refresh() }
+  }, [load, refresh])
 
   const ctx = useMemo(() => ({ open: ((id, anchor, opts) => { if (id) setDoc({ id, anchor, ...opts }) }) as OpenDoc, caseId: caseId ?? '' }), [caseId])
   const t = data?.tables
+  const mv = pool?.massenverfahren.find((m) => m.id === mvId)
+  const openMv = (id: string) => { setMvId(id); setView('mv'); setDoc(null) }
 
   return (
     <DocCtx.Provider value={ctx}>
@@ -74,10 +81,23 @@ export default function App() {
         <nav className="side" aria-label="Navigation">
           <div className="brand">Aktenaufbereiter</div>
           <div className="casename">{data?.case.name ?? 'Keine Akte geöffnet'}</div>
-          <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => setView('start')}>Start / Neue Akte</button>
+          <div className="nav-group">Aktenpool</div>
+          <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}>
+            Alle Akten<span className="n">{pool?.einzel.length ?? 0}</span>
+          </button>
+          {pool?.massenverfahren.map((m) => (
+            <button key={m.id} className="nav" title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
+              <span className="nav-label"><small>Massenverfahren in Sache</small>{m.sache}</span><span className="n">{m.mitglieder.length}</span>
+            </button>
+          ))}
           {data && NAV.map((g) => (
             <div key={g.group} style={{ display: 'contents' }}>
               <div className="nav-group">{g.group}</div>
+              {g.group === 'Verzeichnisse' && data.case.massenverfahren && (
+                <button className="nav" aria-current={view === 'einzelverfahren' ? 'page' : undefined} onClick={() => setView('einzelverfahren')}>
+                  Einzelverfahren<span className="n">{data.case.massenverfahren.verfahren.length}</span>
+                </button>
+              )}
               {g.items.map((i) => (
                 <button key={i.id} className="nav" aria-current={view === i.id ? 'page' : undefined} onClick={() => setView(i.id)}>
                   {i.label}{i.count && <span className="n">{i.count(data)}</span>}
@@ -99,8 +119,10 @@ export default function App() {
         </nav>
 
         <main className="main">
-          {view === 'start' || !data || !t ? (
-            <Start cases={cases} onOpen={(id) => load(id)} job={job} onStart={startJob} />
+          {view === 'mv' && mv ? (
+            <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
+          ) : view === 'start' || view === 'mv' || !data || !t ? (
+            <Start pool={pool} onMassenverfahren={openMv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
           ) : view === 'geschehen' ? <GeschehenTimeline data={data.case} />
             : view === 'verfahren' ? (<><VerfahrenTimeline data={data.case} /><DataTable table={t.verfahren} /></>)
             : view === 'widersprueche' ? <Contradictions data={data.case} />

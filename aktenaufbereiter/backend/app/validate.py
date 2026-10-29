@@ -24,17 +24,22 @@ def _walk(case: Case):
     for coll in (case.personen, case.entitaeten, case.ereignisse, case.aussagen, case.beziehungen,
                  case.tatkomplexe, case.fristen, case.offene_fragen):
         for item in coll:
-            yield item.id, item.fundstellen
+            yield item.id, item.fundstellen, True
     for w in case.widersprueche:
         for v in w.varianten:
-            yield w.id, v.fundstellen
+            yield w.id, v.fundstellen, True
+    if case.massenverfahren:
+        for v in case.massenverfahren.verfahren:
+            fs = [v.klageeingang_fundstelle] if v.klageeingang_fundstelle else []
+            fs += [f for m in v.merkmale for f in m.fundstellen]
+            yield f"Verfahren {v.buchstabe}", fs, False
 
 
 def validate(case: Case) -> None:
     docs = {d.id: d for d in case.dokumente}
     anchors = {d.id: {l.anchor: l for l in d.text_lines} for d in case.dokumente}
     case.warnungen = []
-    for rid, fs in _walk(case):
+    for rid, fs, erforderlich in _walk(case):
         for f in fs:
             d = docs.get(f.doc_id)
             if d is None:
@@ -45,7 +50,7 @@ def validate(case: Case) -> None:
             if f.line and f.line not in anchors[f.doc_id]:
                 f.unklar = True
                 case.warnungen.append(f"{rid}: Anker {f.line} nicht im Dokument")
-        if not fs:
+        if not fs and erforderlich:
             case.warnungen.append(f"{rid}: ohne Fundstelle")
 
 

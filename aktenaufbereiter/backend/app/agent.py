@@ -121,6 +121,11 @@ async def run(folder: Path, case_id: str, name: str | None = None, progress: Pro
     for d, ex in zip(docs, extractions):
         _apply(d, ex)
 
+    return await finish(case_id, name, docs, extractions, existing, offset, progress, failed)
+
+
+async def finish(case_id, name, docs, extractions, existing, offset, progress,
+                 failed=(), extra: dict | None = None) -> Case:
     all_docs = (existing.dokumente if existing else []) + docs
     assign_blatt(docs, start=offset + 1)  # Bestandsblätter bleiben, neue Stücke werden angehängt
     store.sort_files(case_id, docs)
@@ -131,7 +136,7 @@ async def run(folder: Path, case_id: str, name: str | None = None, progress: Pro
         _merge_append_only(cons, existing)
 
     case = Case(id=case_id, name=name or (existing.name if existing else case_id),
-                dokumente=sorted(all_docs, key=lambda d: d.blatt_von or 0), **cons.model_dump())
+                dokumente=sorted(all_docs, key=lambda d: d.blatt_von or 0), **cons.model_dump(), **(extra or {}))
     drop_trivial(case)
     validate(case)
     case.warnungen += [f"{d}: Extraktion fehlgeschlagen" for d in failed]

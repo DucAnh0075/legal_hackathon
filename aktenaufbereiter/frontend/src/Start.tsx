@@ -1,19 +1,30 @@
 import { useRef, useState } from 'react'
-import type { CaseInfo } from './api'
+import type { Pool } from './api'
 import { api } from './api'
 import { Page } from './components'
 
 export type JobState = { caseId: string; log: string[]; busy: boolean; error: string; started: number }
 
-export function Start({ cases, onOpen, job, onStart }: {
-  cases: CaseInfo[]; onOpen: (id: string) => void; job: JobState | null; onStart: (jobId: string, caseId: string) => void
+export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
+  pool: Pool | null; onMassenverfahren: (id: string) => void; onOpen: (id: string) => void; job: JobState | null; onStart: (jobId: string, caseId: string, open?: boolean) => void
 }) {
   const [caseId, setCaseId] = useState('')
   const [name, setName] = useState('')
   const [folder, setFolder] = useState('')
   const files = useRef<HTMLInputElement>(null)
   const [startError, setStartError] = useState('')
-  const busy = !!job?.busy
+  const [pending, setPending] = useState(false)
+  const busy = pending || !!job?.busy
+  const cases = pool?.einzel ?? []
+
+  const refreshPool = async () => {
+    setPending(true); setStartError('')
+    try {
+      const { job } = await api.refreshPool()
+      onStart(job, '', false)
+    } catch (err) { setStartError(String(err)) }
+    finally { setPending(false) }
+  }
   const log = job?.log ?? []
   const error = startError || job?.error || ''
 
@@ -32,9 +43,23 @@ export function Start({ cases, onOpen, job, onStart }: {
 
   return (
     <Page title="Aktenaufbereiter" sub="Akten einlesen, sortieren, Verzeichnisse und Beweisboard erzeugen">
+      <section className="cases">
+        <div className="pool-head">
+          <h2>{pool?.massenverfahren.length ? `${pool.massenverfahren.length} Massenverfahren erkannt` : 'Keine Massenverfahren erkannt'}</h2>
+          <button className="btn" disabled={busy} onClick={refreshPool}>Pool neu prüfen</button>
+        </div>
+        {!!pool?.massenverfahren.length && <>
+          {pool.massenverfahren.map((m) => (
+            <button key={m.id} className="caserow" onClick={() => onMassenverfahren(m.id)}>
+              <b>{m.sache}</b>
+              <span className="stats"><span>{m.mitglieder.length} Akten</span>{m.sammelakte_id && <span>Sammelakte vorhanden</span>}</span>
+            </button>
+          ))}
+        </>}
+      </section>
       {cases.length > 0 && (
         <section className="cases">
-          <h2 style={{ fontSize: 18, marginBottom: 4 }}>Bearbeitete Akten</h2>
+          <h2 style={{ fontSize: 18, marginBottom: 4 }}>Aktenpool</h2>
           {cases.map((c) => (
             <button key={c.id} className="caserow" onClick={() => onOpen(c.id)}>
               <b>{c.name}</b>

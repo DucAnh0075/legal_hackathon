@@ -1,4 +1,5 @@
 import json
+import re
 
 from pydantic import BaseModel
 
@@ -164,3 +165,53 @@ AKTENINHALT:
 
 Nur JSON nach diesem Schema:
 {json.dumps(BoardStruktur.model_json_schema(), ensure_ascii=False)}"""
+
+
+SYSTEM_POOL = (
+    "Du bist ein Aktenaufbereiter für Richterinnen und Richter in Zivil- und Strafverfahren. "
+    "Aus Aktenbestandteilen erstellst du strukturierte Übersichten. Ziel: die Wirklichkeit, "
+    "wie sie in der Akte repräsentiert ist, schnell und vollständig erfassbar machen.\n\n"
+    + SYSTEM.split("\n\n", 1)[1]
+)
+
+
+def profil_prompt(case: Case) -> str:
+    from .schemas import FallProfil
+
+    data = {
+        "dokumente": [{**d.model_dump(include={"id", "title", "doc_type", "dokumentdatum", "eingangsdatum", "essentialia"}),
+                       "text_lines": [f"[{l.anchor}] {l.text}" for i, l in enumerate(d.text_lines)
+                                      if i < 12 or re.search(r"eingegangen|eingang", l.text, re.I)]} for d in case.dokumente],
+        "personen": [p.model_dump(include={"id", "name", "rollen"}) for p in case.personen],
+        "entitaeten": [e.model_dump(include={"typ", "label", "details"}) for e in case.entitaeten],
+        "ereignisse": [{**e.model_dump(include={"kind", "verfahrens_typ", "ereignisdatum", "dokumentdatum", "eingangsdatum", "beschreibung"}),
+                        "fundstellen": [f.model_dump(include={"doc_id", "line"}) for f in e.fundstellen]}
+                       for e in case.ereignisse],
+    }
+    return f"""Erstelle ein Profil ausschließlich aus dem Akteninhalt. Keine Wertung, keine Normen außer aus der Akte.
+- aktivseite: Namen der Kläger/Antragsteller/Anzeigenden; gegenseite: Beklagte/Beschuldigte.
+- gegenstand: ein sachlicher Satz.
+- merkmale: höchstens 6 Merkmale, die den Lebenssachverhalt eindeutig kennzeichnen und in gleichartigen Parallelverfahren wiederkehren würden (Flugnummer, Flugdatum, Strecke, Produkt, Charge, Rückruf, Unfallort/-datum, Vertrag …); keine fallindividuellen Details wie Beträge, Ärzte, Sitzplätze, Aktenzeichen oder Parteivortrag. Wert wie in der Akte; Fundstellen als Zeilenanker-Objekte {{"doc_id":"A01","line":"A01:L03"}}. Keine Anker erfinden.
+- klageeingang: Eingang der Klage/Anzeige bei Gericht, nur wenn in der Akte ausgewiesen, mit klageeingang_fundstelle. Nicht mit Ereignis- oder Dokumentdatum verwechseln.
+
+AKTENINHALT:
+{json.dumps(data, ensure_ascii=False, separators=(',', ':'))}
+
+Nur JSON nach diesem Schema:
+{json.dumps(FallProfil.model_json_schema(), ensure_ascii=False)}"""
+
+
+def pool_prompt(profile_json: str) -> str:
+    from .schemas import PoolGruppen
+
+    return f"""Erkenne Massenverfahren ausschließlich anhand der Aktenprofile, ohne Wertung.
+Eine Gruppe umfasst mindestens zwei Akten mit DERSELBEN Gegenseite (Schreibvarianten derselben Firma zählen gleich) UND DEMSELBEN Lebenssachverhalt: etwa derselbe Flug am selben Tag, dasselbe zurückgerufene Produkt bzw. dieselbe Charge oder dasselbe Schadensereignis.
+Gleiche Branche, gleiche Gegenseite allein oder gleiche Rechtsfrage reichen NICHT. Bei fehlenden Angaben keine Gemeinsamkeit vermuten.
+sache: kurze neutrale Bezeichnung, etwa "Flug NB 4711 vom 14.11.2025" oder "VitaKids Getreidebrei, Charge 24-117".
+gemeinsamkeiten: kurze sachliche Punkte, nur was in allen zugehörigen Profilen steht. Jede Akte höchstens einer Gruppe zuordnen; nur übergebene case_ids verwenden.
+
+AKTENPROFILE:
+{profile_json}
+
+Nur JSON nach diesem Schema:
+{json.dumps(PoolGruppen.model_json_schema(), ensure_ascii=False)}"""

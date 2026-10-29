@@ -76,8 +76,30 @@ def build(case: Case, ann: dict) -> dict[str, dict]:
     blatt = blatt_label
 
     t: dict[str, dict] = {}
-    t["akte"] = {"title": "1. Aktenübersicht", "cols": ["#", "Blatt", "Datum", "Vorgang", "Essentialia"],
-                 "rows": [{"id": d.id, "doc": d.id, "cells": [i + 1, blatt(d), dv(d.dokumentdatum), f"{d.id} {d.doc_type}: {d.title}", d.essentialia]}
+    verfahren = case.massenverfahren.verfahren if case.massenverfahren else []
+    buchstaben = {v.case_id: v.buchstabe for v in verfahren}
+    if case.massenverfahren:
+        rows = []
+        for v in sorted(verfahren, key=lambda v: (not bool(v.klageeingang and v.klageeingang.iso),
+                                                  v.klageeingang.iso or "" if v.klageeingang else "")):
+            fundstellen = [v.klageeingang_fundstelle] if v.klageeingang_fundstelle else []
+            fundstellen += [f for m in v.merkmale for f in m.fundstellen]
+            doc = fundstellen[0].doc_id if fundstellen else next(
+                (d.id for d in case.dokumente if d.id.startswith(v.buchstabe)), None)
+            rows.append({"id": v.buchstabe, "doc": doc,
+                         "cells": [v.buchstabe, dv(v.klageeingang), v.name, "; ".join(v.aktivseite),
+                                   "; ".join(v.gegenseite), "; ".join(f"{m.art}: {m.wert}" for m in v.merkmale),
+                                   fs(fundstellen)]})
+        t["einzelverfahren"] = {"title": "0. Einzelverfahren (nach Klageeingang)",
+                               "cols": ["Verfahren", "Eingang", "Akte", "Aktivseite", "Gegenseite", "Merkmale", "Fundstelle"],
+                               "rows": rows}
+    mit_verfahren = any(d.quelle_akte for d in case.dokumente)
+    t["akte"] = {"title": "1. Aktenübersicht",
+                 "cols": ["#", "Blatt"] + (["Verfahren"] if mit_verfahren else []) + ["Datum", "Vorgang", "Essentialia"],
+                 "rows": [{"id": d.id, "doc": d.id,
+                           "cells": [i + 1, blatt(d)]
+                           + ([buchstaben.get(d.quelle_akte, d.quelle_akte or "")] if mit_verfahren else [])
+                           + [dv(d.dokumentdatum), f"{d.id} {d.doc_type}: {d.title}", d.essentialia]}
                           for i, d in enumerate(akten_reihenfolge(case.dokumente))]}
     t["personen"] = {"title": "2. Personenverzeichnis", "cols": ["#", "Name", "Adresse", "Prozessrolle", "Blatt"],
                      "rows": [{"id": p.id, "doc": p.fundstellen[0].doc_id if p.fundstellen else None,

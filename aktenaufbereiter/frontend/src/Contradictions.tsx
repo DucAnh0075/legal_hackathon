@@ -2,7 +2,7 @@ import type { Case } from './api'
 import { FundChips, Page } from './components'
 
 export function Contradictions({ data }: { data: Case }) {
-  const who = new Map(data.personen.map((p) => [p.id, p.name]))
+  const who = new Map([...data.personen.map((p) => [p.id, p.name] as const), ...data.entitaeten.map((e) => [e.id, e.label] as const)])
   return (
     <Page title="Widersprüche" sub={`${data.widersprueche.length} Abweichungen, jeweils alle Varianten mit Fundstelle`}>
       {data.widersprueche.length === 0 ? <div className="empty">Keine Widersprüche dokumentiert.</div> : (

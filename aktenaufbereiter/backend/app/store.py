@@ -34,7 +34,7 @@ def list_cases() -> list[dict]:
         c = Case.model_validate_json(p.read_text(encoding="utf-8"))
         view.apply(c, review.load(c.id))
         out.append({"id": c.id, "name": c.name, "dokumente": len(c.dokumente), "personen": len(c.personen),
-                    "widersprueche": len(c.widersprueche)})
+                    "widersprueche": len(c.widersprueche), "sammelakte": c.massenverfahren is not None})
     return out
 
 
