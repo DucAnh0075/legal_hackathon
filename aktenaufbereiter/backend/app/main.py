@@ -11,10 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import store
+from . import review, store, view
 from .agent import run
 from .export_xlsx import export
 from .tables import build
+from .marks import find_marks, marked_pdf
 
 app = FastAPI(title="Aktenaufbereiter")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_methods=["*"], allow_headers=["*"])
@@ -25,6 +26,7 @@ def _case(case_id: str):
     c = store.load_case(case_id)
     if not c:
         raise HTTPException(404, "Fall nicht gefunden")
+    view.apply(c, review.load(case_id))
     return c
 
 
@@ -81,18 +83,44 @@ def cases():
 @app.get("/api/cases/{case_id}")
 def get_case(case_id: str):
     c = _case(case_id)
-    return {"case": c, "tables": build(c, store.get_annotations(case_id)), "layout": store.get_layout(case_id)}
+    return {"case": c, "tables": build(c, store.get_annotations(case_id)), "layout": store.get_layout(case_id),
+            "suspects": store.get_suspects(case_id)}
 
 
 @app.get("/api/cases/{case_id}/files/{doc_id}")
-def get_file(case_id: str, doc_id: str, fmt: str | None = None):
+def get_file(case_id: str, doc_id: str, fmt: str | None = None, mark: str | None = None):
     c = _case(case_id)
     d = next((d for d in c.dokumente if d.id == doc_id), None)
     if not d:
         raise HTTPException(404)
     rep = next((r for r in d.representations if r.format == fmt), None) if fmt else None
-    rel = (rep.sorted_path if rep else d.sorted_path)
-    return FileResponse(store.case_dir(case_id) / rel)
+    if fmt and rep is None:
+        raise HTTPException(404, "Dateiformat nicht gefunden")
+    rel = rep.sorted_path if rep else d.sorted_path
+    if not rel:
+        raise HTTPException(404, "Datei nicht gefunden")
+    path = store.case_dir(case_id) / rel
+    selected = rep.format if rep else d.format
+    if mark and selected in ("pdf_text", "pdf_image"):
+        marks = find_marks(case_id, d, selected, mark.split(","))
+        return Response(marked_pdf(path, marks["boxes"]), media_type="application/pdf")
+    return FileResponse(path)
+
+
+@app.get("/api/cases/{case_id}/marks/{doc_id}")
+def get_marks(case_id: str, doc_id: str, lines: str, fmt: str | None = None):
+    c = _case(case_id)
+    d = next((d for d in c.dokumente if d.id == doc_id), None)
+    if not d or (fmt and not any(r.format == fmt for r in d.representations)):
+        raise HTTPException(404)
+    return find_marks(case_id, d, fmt, lines.split(","))
+
+
+@app.put("/api/cases/{case_id}/suspects")
+def put_suspects(case_id: str, body: dict[str, bool]):
+    _case(case_id)
+    store.set_suspects(case_id, body)
+    return {"ok": True}
 
 
 class AnnIn(BaseModel):

@@ -4,18 +4,18 @@ import { Board } from './Board'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
-import { DocCtx } from './ctx'
+import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
-type View = 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'offene_fragen' | 'geschehen' | 'verfahren' | 'board'
+type View = 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
 
 const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
     { id: 'akte', label: 'Aktenübersicht', count: (d) => d.case.dokumente.length },
     { id: 'personen', label: 'Personen', count: (d) => d.case.personen.length },
     { id: 'tatkomplexe', label: 'Tatkomplexe', count: (d) => d.case.tatkomplexe.length },
-    { id: 'beziehungen', label: 'Beziehungen', count: (d) => d.case.beziehungen.length },
+    { id: 'beziehungen', label: 'Beziehungen', count: (d) => d.tables.beziehungen.rows.length },
     { id: 'fristen', label: 'Fristen & Termine', count: (d) => d.case.fristen.length },
   ] },
   { group: 'Zeitleisten', items: [
@@ -25,7 +25,6 @@ const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseDa
   { group: 'Analyse', items: [
     { id: 'board', label: 'Beweisboard' },
     { id: 'widersprueche', label: 'Widersprüche', count: (d) => d.case.widersprueche.length },
-    { id: 'offene_fragen', label: 'Offene Fragen', count: (d) => d.case.offene_fragen?.length ?? 0 },
   ] },
 ]
 
@@ -34,7 +33,7 @@ export default function App() {
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
   const [view, setView] = useState<View>('start')
-  const [doc, setDoc] = useState<{ id: string; anchor?: string } | null>(null)
+  const [doc, setDoc] = useState<{ id: string; anchor?: string; anchors?: string[]; original?: boolean } | null>(null)
   const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
   const [job, setJob] = useState<JobState | null>(null)
   const [now, setNow] = useState(Date.now())
@@ -66,7 +65,7 @@ export default function App() {
     es.onerror = () => { es.close(); setJob((j) => j && { ...j, busy: false, error: j.error || 'Verbindung zum Agenten unterbrochen.' }) }
   }, [load])
 
-  const ctx = useMemo(() => ({ open: (id: string, anchor?: string) => id && setDoc({ id, anchor }), caseId: caseId ?? '' }), [caseId])
+  const ctx = useMemo(() => ({ open: ((id, anchor, opts) => { if (id) setDoc({ id, anchor, ...opts }) }) as OpenDoc, caseId: caseId ?? '' }), [caseId])
   const t = data?.tables
 
   return (
@@ -105,11 +104,11 @@ export default function App() {
           ) : view === 'geschehen' ? <GeschehenTimeline data={data.case} />
             : view === 'verfahren' ? (<><VerfahrenTimeline data={data.case} /><DataTable table={t.verfahren} /></>)
             : view === 'widersprueche' ? <Contradictions data={data.case} />
-            : view === 'board' ? <div className="page" style={{ paddingBottom: 16 }}><header><h1>Beweisboard</h1><span className="sub">Karten verschieben, anklicken, Doppelklick öffnet das Beweismittel</span></header><Board data={data.case} /></div>
+            : view === 'board' ? <div className="page" style={{ paddingBottom: 16 }}><header><h1>Beweisboard</h1><span className="sub">Karten verschieben, anklicken, Doppelklick öffnet das Beweismittel</span></header><Board key={caseId} data={data.case} suspects={data.suspects ?? {}} onSuspects={(suspects) => setData((d) => d?.case.id === data.case.id ? { ...d, suspects } : d)} /></div>
             : <DataTable key={view} table={t[view]} sub={view === 'akte' && data.case.warnungen.length ? `${data.case.warnungen.length} Validierungshinweise` : undefined} />}
         </main>
 
-        {doc && data && <DocViewer data={data.case} docId={doc.id} anchor={doc.anchor} onClose={() => setDoc(null)} />}
+        {doc && data && <DocViewer data={data.case} docId={doc.id} anchor={doc.anchor} anchors={doc.anchors} original={doc.original} onClose={() => setDoc(null)} />}
       </div>
     </DocCtx.Provider>
   )

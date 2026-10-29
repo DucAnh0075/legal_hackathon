@@ -27,9 +27,12 @@ def load_case(case_id: str) -> Case | None:
 
 
 def list_cases() -> list[dict]:
+    from . import review, view
+
     out = []
     for p in sorted(config.CASES_DIR.glob("*/case.json")):
         c = Case.model_validate_json(p.read_text(encoding="utf-8"))
+        view.apply(c, review.load(c.id))
         out.append({"id": c.id, "name": c.name, "dokumente": len(c.dokumente), "personen": len(c.personen),
                     "widersprueche": len(c.widersprueche)})
     return out
@@ -78,3 +81,11 @@ def sort_files(case_id: str, docs: list[Document]) -> None:
             r.sorted_path = str(dst.relative_to(case_dir(case_id)))
         main = next(r for r in d.representations if r.format == d.format)
         d.sorted_path = main.sorted_path
+
+
+def get_suspects(case_id: str) -> dict[str, bool]:
+    return _json_file(case_id, "suspects.json")
+
+
+def set_suspects(case_id: str, suspects: dict[str, bool]) -> None:
+    _write_json(case_id, "suspects.json", suspects)

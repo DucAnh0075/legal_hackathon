@@ -1,6 +1,10 @@
 """Deterministische Prüfung: jede Fundstelle muss auf Dokument und Zeile zeigen."""
 from __future__ import annotations
 
+import re
+from difflib import SequenceMatcher
+from itertools import combinations
+
 from .schemas import Case, Document, Fundstelle, TextLine
 
 
@@ -43,3 +47,25 @@ def validate(case: Case) -> None:
                 case.warnungen.append(f"{rid}: Anker {f.line} nicht im Dokument")
         if not fs:
             case.warnungen.append(f"{rid}: ohne Fundstelle")
+
+
+def drop_trivial(case: Case) -> None:
+    def norm(text: str) -> str:
+        text = re.sub(r"[^\w\s]", "", text.lower())
+        for muster, ersatz in ((r"\bzeugin\b", "zeuge"),
+                                (r"\b(beschuldigt|angeklagt|angeschuldigt)(er|e)\b", r"\1"),
+                                (r"\b(der|die|das)\b", "d"),
+                                (r"\b(\w*(?:zeug|anwält|richter|beamt|kund|beteiligt|mitarbeiter))(?:innen|in)\b", r"\1")):
+            text = re.sub(muster, ersatz, text)
+        return " ".join(text.split())
+
+    def trivial(w) -> bool:
+        if re.search(r"schreibweise|tippfehler|schreibfehler|geschlecht|gender", w.thema, re.I):
+            return True
+        varianten = [v.behauptung for v in w.varianten]
+        return len(varianten) > 1 and all(
+            re.findall(r"\d+", a) == re.findall(r"\d+", b) and
+            SequenceMatcher(None, norm(a), norm(b)).ratio() >= 0.8
+            for a, b in combinations(varianten, 2))
+
+    case.widersprueche = [w for w in case.widersprueche if not trivial(w)]

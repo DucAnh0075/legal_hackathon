@@ -25,7 +25,8 @@ export type Case = {
   widersprueche: Contradiction[]; beziehungen: Relation[]; tatkomplexe: Tatkomplex[]; fristen: FristTermin[]; offene_fragen: OffeneFrage[]; warnungen: string[]
 }
 export type Table = { title: string; cols: string[]; rows: { id: string; doc: string | null; cells: (string | number)[] }[] }
-export type CaseData = { case: Case; tables: Record<string, Table>; layout: Record<string, { x: number; y: number }> }
+export type CaseData = { case: Case; suspects: Record<string, boolean>; tables: Record<string, Table>; layout: Record<string, unknown> }
+export type Marks = { fmt: string; page: number | null; boxes: { page: number; x: number; y: number; w: number; h: number }[]; found: string[]; missing: string[] }
 export type CaseInfo = { id: string; name: string; dokumente: number; personen: number; widersprueche: number }
 
 const j = async <T,>(r: Response): Promise<T> => {
@@ -39,8 +40,17 @@ export const api = {
     fetch(`/api/cases/${id}/annotations/${row}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ field, value }) }),
   saveLayout: (id: string, layout: unknown) =>
     fetch(`/api/cases/${id}/board-layout`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(layout) }),
+  saveSuspects: (id: string, map: Record<string, boolean>) =>
+    fetch(`/api/cases/${id}/suspects`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(map) }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.text()) || r.statusText)
+    }),
+  marks: (id: string, doc: string, lines: string[], fmt?: string) =>
+    fetch(`/api/cases/${id}/marks/${doc}?${new URLSearchParams({ lines: lines.join(','), ...(fmt ? { fmt } : {}) })}`).then((r) => j<Marks>(r)),
   create: (form: FormData) => fetch('/api/cases', { method: 'POST', body: form }).then((r) => j<{ job: string }>(r)),
-  fileUrl: (id: string, doc: string, fmt?: string) => `/api/cases/${id}/files/${doc}${fmt ? `?fmt=${fmt}` : ''}`,
+  fileUrl: (id: string, doc: string, fmt?: string, mark?: string[]) => {
+    const q = new URLSearchParams({ ...(fmt ? { fmt } : {}), ...(mark?.length ? { mark: mark.join(',') } : {}) }).toString()
+    return `/api/cases/${id}/files/${doc}${q ? `?${q}` : ''}`
+  },
   xlsxUrl: (id: string) => `/api/cases/${id}/export.xlsx`,
 }
 

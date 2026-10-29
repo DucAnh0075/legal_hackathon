@@ -2,7 +2,7 @@ import json
 
 from pydantic import BaseModel
 
-from .schemas import DocExtraction, PageScan
+from .schemas import Case, DocExtraction, PageScan, Review
 
 SYSTEM = """Du bist ein Aktenaufbereiter für den Strafrichter. Aus Aktenbestandteilen eines Strafverfahrens erstellst du strukturierte Übersichten zur Vorbereitung der Hauptverhandlung. Ziel: die Wirklichkeit, wie sie in der Akte repräsentiert ist, schnell und vollständig erfassbar machen.
 
@@ -29,7 +29,7 @@ def extract_prompt(doc_id: str, text: str | None, vision: bool) -> str:
     )
     return f"""{src}
 
-Extrahiere: Metadaten (title, doc_type, dokumentdatum, eingangsdatum falls genannt, essentialia = Kerninhalt in 1-2 Sätzen), personen (mit Rolle nur wie in der Akte benannt, Adresse nur wenn genannt), entitaeten (Firmen, Konten, Websites, Profile, Objekte, Chips, Fahrzeuge), ereignisse (geschehen/verfahren), aussagen, beziehungen (Person-Person/Firma/Konto), fristen (HV-Termine, Fristen, Adressen), offene_fragen (nur was die Akte selbst als unklar zeigt). doc_id = "{doc_id}".
+Extrahiere: Metadaten (title, doc_type, herkunft (Polizei, Staatsanwaltschaft, Gericht, Verteidigung, Privat/Beteiligte oder Sonstige; nur wenn aus dem Dokument ersichtlich), dokumentdatum, eingangsdatum falls genannt, essentialia = Kerninhalt in 1-2 Sätzen), personen (mit Rolle nur wie in der Akte benannt, Adresse nur wenn genannt), entitaeten (Firmen, Konten, Websites, Profile, Objekte, Chips, Fahrzeuge), ereignisse (geschehen/verfahren), aussagen, beziehungen (Person-Person/Firma/Konto), fristen (HV-Termine, Fristen, Adressen), offene_fragen (nur was die Akte selbst als unklar zeigt). doc_id = "{doc_id}".
 
 JSON-Schema:
 {schema}"""
@@ -46,12 +46,12 @@ PARTS = {
 - ereignisdatum, dokumentdatum, eingangsdatum strikt getrennt. beteiligte = IDs aus dem Register. Chronologisch ordnen. Kurze, sachliche beschreibung.""",
     "statements": """Erfasse Aussagen und Widersprüche.
 - aussagen (ID s1 ...): wesentliche Aussagen von Personen (person_id aus Register), thema, inhalt.
-- widersprueche (ID w1 ...): nur echte Abweichungen zwischen oder innerhalb von Dokumenten (Datum, Beträge, Abläufe, Zuordnungen, spätere Korrekturen). Jede Variante mit behauptung, quelle_person (ID) und Fundstellen. Sachlich, ohne Wertung.""",
-    "rest": """Erfasse Beziehungen, Tatkomplexe, Fristen und offene Fragen.
-- beziehungen (ID r1 ...): von/zu = IDs aus dem Register (Person-Person, Person-Firma, Person-Konto, Konto-Konto/Zahlungsfluss, Person-Website/Profil). beziehung kurz (z. B. "Geschäftspartner", "Kontakt per Chat", "Kontoinhaberin", "überweist an").
+- widersprueche (ID w1 ...): nur echte Abweichungen zwischen oder innerhalb von Dokumenten (Datum, Beträge, Abläufe, Zuordnungen, spätere Korrekturen). Jede Variante mit behauptung, quelle_person (ID) und Fundstellen. Sachlich, ohne Wertung.
+- Keine Widersprüche für reine Schreib-/Tippfehler in Namen oder Adressen (Schmitt/Schmidt, Rainer/Reiner, Königsalle/Königsallee), abweichende Geschlechtsbezeichnungen/Genderung (Zeuge/Zeugin, der/die Beschuldigte) oder bloße Abkürzungs-/Formatunterschiede, wenn der Kontext zeigt, dass dieselbe Person oder Sache gemeint ist.""",
+    "rest": """Erfasse Beziehungen, Tatkomplexe und Fristen.
+- beziehungen (ID r1 ...): von/zu = IDs aus dem Register; nur reine Verhältnisse (Familie, Freundschaft, Arbeits-/Dienstverhältnis, Geschäftsführung/Inhaberschaft, Geschäftsbeziehung, Mandat) zwischen Personen bzw. Person–Firma; keine Handlungen aus dem Geschehen, keine Verfahrensrollen (Kläger gegen, Zeuge gegen, Richter, Vernehmung, Zustellung), keine Objekte, Konten, Profile, Websites.
 - tatkomplexe (ID t1 ...): Gruppierung der Vorwürfe laut Akte; vorwurf_laut_akte nur wenn in der Akte benannt, sonst "in Akte nicht benannt"; zeitraum; personen (IDs); beweismittel (Dokument-IDs).
-- fristen (ID f1 ...): HV-Termine, Fristen, verfahrensrelevante Adressen.
-- offene_fragen (ID o1 ...): nur was die Akte selbst als ungeklärt ausweist.""",
+- fristen (ID f1 ...): HV-Termine, Fristen, verfahrensrelevante Adressen.""",
 }
 
 
@@ -88,3 +88,28 @@ Aufgaben:
 
 JSON-Schema:
 {schema}"""
+
+
+def review_prompt(case: Case) -> str:
+    data = {
+        "personen": [p.model_dump(include={"id", "name", "rollen"}) for p in case.personen],
+        "entitaeten": [e.model_dump(include={"id", "label", "typ"}) for e in case.entitaeten],
+        "beziehungen": [r.model_dump(include={"id", "von", "beziehung", "zu", "bemerkung"}) for r in case.beziehungen],
+        "widersprueche": [{"id": w.id, "thema": w.thema,
+                          "varianten": [{"behauptung": v.behauptung} for v in w.varianten]} for w in case.widersprueche],
+    }
+    return f"""Klassifiziere jede Beziehungs- und Widerspruchs-ID genau einmal, nur anhand der vorliegenden Akteninhalte. Keine Wertung, keine Ergänzungen oder neuen Anker.
+Beziehungen:
+- verhaeltnis = reines, dauerhaftes Verhältnis zweier Personen bzw. Person–Firma unabhängig vom Geschehen: Familie (Tochter/Sohn/Ehe), Freundschaft/Bekanntschaft, Arbeits-/Dienstverhältnis (Mitarbeiterin, Ladendetektivin bei), Geschäftsführung/Inhaberschaft, Geschäftsbeziehung (Kundin bei), Mandat (Verteidiger von, Rechtsanwalt der Klägerin, Prozessbevollmächtigte von).
+- verfahren = Verfahrensrolle/-handlung (Klägerin gegen, Zeugin gegen, Angeklagte vor Gericht, Richterin am, Staatsanwältin bei, Vernehmungsleitung, Aufnahme der Anzeige, Zustellung, Adressat, Urkundsbeamter).
+- handlung = einzelne Handlung im Geschehen (überweist an, hat erwischt, schickt Link, Telefonat, Chat-/Webchat-Kommunikation, Buchung, Rechnung, stellt bereit, Verfasserin von).
+- sonstiges = alles mit Objekten, Konten, Profilen, Websites, Orten, Gruppen, Dokumenten, Namensähnlichkeit ohne Zuordnung.
+Widersprüche:
+- schreibweise = Varianten unterscheiden sich nur in Schreibweise/Tippfehler/Genderung/Abkürzung/Format UND der Kontext zeigt eindeutig, dass dieselbe Person/Sache gemeint ist.
+- echt = alle anderen Abweichungen; abweichende Daten, Uhrzeiten, Beträge, Abläufe, Zuordnungen oder Identitätsfragen sind immer echt.
+
+AKTENINHALT:
+{json.dumps(data, ensure_ascii=False)}
+
+Nur JSON nach diesem Schema:
+{json.dumps(Review.model_json_schema(), ensure_ascii=False)}"""

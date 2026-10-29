@@ -7,3 +7,5 @@ python-multipart>=0.0.20
 openpyxl>=3.1
 pypdf>=5.1
 json-repair>=0.30
+rapidocr>=3.10
+onnxruntime>=1.20

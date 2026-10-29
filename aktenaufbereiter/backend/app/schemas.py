@@ -51,6 +51,7 @@ class Document(BaseModel):
     sorted_path: str | None = None
     blatt_von: int | None = None
     blatt_bis: int | None = None
+    herkunft: str | None = None  # "Polizei", "Staatsanwaltschaft", "Gericht", "Verteidigung", "Privat/Beteiligte", "Sonstige"; nur aus Dokument ersichtlich
     dokumentdatum: DateValue | None = None
     eingangsdatum: DateValue | None = None
     essentialia: str = ""
@@ -125,6 +126,7 @@ class DocExtraction(BaseModel):
     doc_id: str
     title: str
     doc_type: str
+    herkunft: str | None = None  # "Polizei", "Staatsanwaltschaft", "Gericht", "Verteidigung", "Privat/Beteiligte", "Sonstige"; nur aus Dokument ersichtlich
     dokumentdatum: DateValue | None = None
     eingangsdatum: DateValue | None = None
     essentialia: str
@@ -269,3 +271,18 @@ class Case(Consolidation):
 class Annotation(BaseModel):
     kanzlei: str = "offen"
     mandant: str = "offen"
+
+
+class ReviewBeziehung(BaseModel):
+    id: str
+    art: Literal["verhaeltnis", "verfahren", "handlung", "sonstiges"]
+
+
+class ReviewWiderspruch(BaseModel):
+    id: str
+    art: Literal["echt", "schreibweise"]
+
+
+class Review(BaseModel):
+    beziehungen: list[ReviewBeziehung] = []
+    widersprueche: list[ReviewWiderspruch] = []

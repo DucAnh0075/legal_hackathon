@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { evDates, type Case, type DateValue, type Ev } from './api'
-import { StatusChip, Page } from './components'
+import { StatusChip, Page, FundChips } from './components'
 import { useDocs } from './ctx'
 
 const DAY = 86400000
@@ -122,56 +122,46 @@ export function GeschehenTimeline({ data }: { data: Case }) {
 /** Zeitleiste 2: Verfahren. Je Vorgang drei Marker: Ereignis, Dokument, Eingang. */
 export function VerfahrenTimeline({ data }: { data: Case }) {
   const { open } = useDocs()
-  const [ppd, setPpd] = useState(70)
-  const rows = data.ereignisse.filter((e) => e.kind === 'verfahren').map((e) => ({ e, d: evDates(e, data.dokumente) }))
-    .map((r) => ({ ...r, t: [ms(r.d.ereignis), ms(r.d.dokument), ms(r.d.eingang)] }))
-    .filter((r) => r.t.some((x) => !isNaN(x)))
-    .sort((a, b) => Math.min(...a.t.filter((x) => !isNaN(x))) - Math.min(...b.t.filter((x) => !isNaN(x))))
-  const all = rows.flatMap((r) => r.t).filter((x) => !isNaN(x))
-  const axis = useAxis(all.length ? all : [Date.now()], ppd)
-
-  return (
-    <Page title="Zeitleiste · Verfahren" sub="Ereignis, Dokument und Eingang getrennt" tools={<Zoom ppd={ppd} set={setPpd} />}>
-      <div className="legend" style={{ marginBottom: 10 }}>
-        <span><span className="mk e" style={{ position: 'static', transform: 'none', '--c': 'var(--s-aussage)' } as React.CSSProperties}><i /></span> Ereignisdatum</span>
-        <span><span className="mk d" style={{ position: 'static', transform: 'none', '--c': 'var(--s-korrektur)' } as React.CSSProperties}><i /></span> Dokumentdatum</span>
-        <span><span className="mk g" style={{ position: 'static', transform: 'none', '--c': 'var(--s-belegt)' } as React.CSSProperties}><i /></span> Eingangsdatum</span>
+  const rows = data.ereignisse.filter((e) => e.kind === 'verfahren').map((e) => {
+    const d = evDates(e, data.dokumente)
+    return { e, d, t: Math.min(...Object.values(d).map(ms).filter(Number.isFinite)) }
+  }).sort((a, b) => a.t - b.t)
+  const dated = rows.filter((r) => Number.isFinite(r.t))
+  const undated = rows.filter((r) => !Number.isFinite(r.t))
+  const kinds = [ ['ereignis', 'Ereignis', 'aussage'], ['dokument', 'Dokument', 'korrektur'], ['eingang', 'Eingang', 'belegt'] ] as const
+  const month = (t: number) => new Date(t).toLocaleDateString('de-DE', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const card = ({ e, d }: typeof rows[number]) => (
+    <article className="verfahren-card" onClick={() => { const f = e.fundstellen[0]; if (f) open(f.doc_id, f.line ?? undefined) }}>
+      <button className="verfahren-open" disabled={!e.fundstellen.length}><b>{e.verfahrens_typ || 'Vorgang'}</b> · {e.beschreibung}</button>
+      <div className="verfahren-dates">
+        {kinds.map(([key, label, color]) => <span key={key} className={`date-chip s-${color}`} title={d[key]?.hinweis ?? undefined}>
+          <span><i className="dot" /> <b>{label}</b> {d[key]?.anzeige || d[key]?.iso || '–'}</span>
+          {d[key]?.hinweis && <small>{d[key].hinweis}</small>}
+        </span>)}
       </div>
-      {rows.length === 0 ? <div className="empty">Keine datierten Verfahrensschritte.</div> : (
-        <div className="tl" style={{ maxHeight: 'calc(100vh - 210px)' }}>
-          <div style={{ width: axis.width + 300, minWidth: '100%' }}>
-            <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 6, background: 'var(--sunken)', borderBottom: '1px solid var(--line)' }}>
-              <div className="lane-label" style={{ width: 300, borderBottom: 0 }}>Verfahrensschritt</div>
-              <div style={{ position: 'relative', width: axis.width, height: 26 }}>
-                {axis.ticks.map((t, i) => <div key={i} className="axis-tick" style={{ left: t.x, height: 26 }}><span>{t.label}</span></div>)}
-              </div>
-            </div>
-            {rows.map(({ e, d, t }) => {
-              const valid = t.filter((x) => !isNaN(x))
-              const [a, b] = [Math.min(...valid), Math.max(...valid)]
-              const mk = (v: number, cls: string, color: string, label: string) => isNaN(v) ? null : (
-                <span key={cls} className={`mk ${cls}`} style={{ left: axis.x(v), '--c': color } as React.CSSProperties} title={label}><i /></span>
-              )
-              return (
-                <div key={e.id} style={{ display: 'flex' }}>
-                  <button className="lane-label" style={{ width: 300, textAlign: 'left', fontWeight: 400, cursor: 'pointer', height: 44, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', borderTop: 0, borderLeft: 0, color: 'inherit', font: 'inherit' }}
-                    onClick={() => open(e.fundstellen[0]?.doc_id, e.fundstellen[0]?.line ?? undefined)} title={e.beschreibung}>
-                    <b>{e.verfahrens_typ ?? 'Vorgang'}</b> · {e.beschreibung}
-                  </button>
-                  <div className="vrow" style={{ width: axis.width }}>
-                    {axis.ticks.map((tk, i) => <div key={i} className="axis-tick" style={{ left: tk.x }} />)}
-                    <div className="track" style={{ left: axis.x(a), width: axis.x(b) - axis.x(a) }} />
-                    {mk(t[0], 'e', 'var(--s-aussage)', `Ereignis ${d.ereignis?.anzeige}`)}
-                    {mk(t[1], 'd', 'var(--s-korrektur)', `Dokument ${d.dokument?.anzeige}`)}
-                    {mk(t[2], 'g', 'var(--s-belegt)', `Eingang ${d.eingang?.anzeige}`)}
-                    <span className="vlabel" style={{ left: axis.x(b) + 14 }}>{[d.ereignis, d.dokument, d.eingang].map((x) => x?.anzeige ?? '–').join(' · ')}</span>
-                  </div>
-                </div>
-              )
-            })}
+      <div className="verfahren-fund" onClick={(e) => e.stopPropagation()}><FundChips items={e.fundstellen} /></div>
+    </article>
+  )
+  return (
+    <Page title="Zeitleiste · Verfahren" sub={`${dated.length} datierte Verfahrensschritte`}>
+      <div className="legend">
+        {kinds.map(([, label, color]) => <span key={label}><i className={`dot s-${color}`} style={{ background: 'var(--c)' }} />{label === 'Eingang' ? 'Eingangs' : label}datum</span>)}
+      </div>
+      <div className="verfahren-strang">
+        {!dated.length && <div className="empty">Keine datierten Verfahrensschritte.</div>}
+        {dated.map((r, i) => {
+          const prev = dated[i - 1]
+          const days = prev ? Math.floor((r.t - prev.t) / DAY) : 0
+          return <div key={r.e.id}>
+            {days > 7 && <div className="verfahren-gap">{days} Tage</div>}
+            {(!prev || month(prev.t) !== month(r.t)) && <h3 className="verfahren-month">{month(r.t)}</h3>}
+            <div className="verfahren-station">{card(r)}</div>
           </div>
-        </div>
-      )}
+        })}
+        {!!undated.length && <section><h3 className="verfahren-month">Ohne verwertbares Datum</h3>
+          {undated.map((r) => <div className="verfahren-station" key={r.e.id}>{card(r)}</div>)}
+        </section>}
+      </div>
     </Page>
   )
 }

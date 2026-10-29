@@ -7,11 +7,28 @@ from .ingest import assign_blatt, ingest
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["ingest", "process"])
-    ap.add_argument("folder")
+    ap.add_argument("cmd", choices=["ingest", "process", "review"])
+    ap.add_argument("folder", nargs="?")
     ap.add_argument("--case", default="fall")
     ap.add_argument("--name")
     args = ap.parse_args()
+    if args.cmd == "review":
+        import asyncio
+        from collections import Counter
+
+        from . import store
+        from .review import art_beziehung, art_widerspruch, review
+
+        case = store.load_case(args.case)
+        if case is None:
+            ap.error("Fall nicht gefunden")
+        rv = asyncio.run(review(case))
+        for feld, art in (("beziehungen", art_beziehung), ("widersprueche", art_widerspruch)):
+            counts = Counter(art(rv, item) for item in getattr(case, feld))
+            print(f"{feld}: " + ", ".join(f"{a or 'ungeprüft'}: {n}" for a, n in counts.items()))
+        return
+    if not args.folder:
+        ap.error("Ordner für ingest/process erforderlich")
     if args.cmd == "process":
         import asyncio
 

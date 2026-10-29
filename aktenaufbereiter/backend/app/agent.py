@@ -12,7 +12,7 @@ from .segment import segment
 from .llm import ask
 from .prompts import SYSTEM, consolidate_prompt, extract_prompt
 from .schemas import Case, Consolidation, ConsEntities, ConsEvents, ConsRest, ConsStatements, DocExtraction, Document
-from .validate import blatt_label, validate
+from .validate import blatt_label, drop_trivial, validate
 
 Progress = Callable[[str], None]
 COLLECTIONS = ["personen", "entitaeten", "ereignisse", "aussagen", "widersprueche", "beziehungen",
@@ -46,6 +46,7 @@ def _apply(doc: Document, ex: DocExtraction) -> None:
     doc.title = doc.title or ex.title
     doc.doc_type = doc.doc_type or ex.doc_type
     doc.dokumentdatum = doc.dokumentdatum or ex.dokumentdatum
+    doc.herkunft = ex.herkunft
     doc.eingangsdatum = ex.eingangsdatum
     doc.essentialia = ex.essentialia
     if doc.needs_vision:
@@ -131,9 +132,20 @@ async def run(folder: Path, case_id: str, name: str | None = None, progress: Pro
 
     case = Case(id=case_id, name=name or (existing.name if existing else case_id),
                 dokumente=sorted(all_docs, key=lambda d: d.blatt_von or 0), **cons.model_dump())
+    drop_trivial(case)
     validate(case)
     case.warnungen += [f"{d}: Extraktion fehlgeschlagen" for d in failed]
-    store.save_case(case)
+    gespeichert = case.model_copy(deep=True)
+    if existing:
+        # Die gefilterte Sicht darf beim Ergänzen keine Bestandseinträge entfernen.
+        _merge_append_only(gespeichert, existing)
+    store.save_case(gespeichert)
+    try:
+        from .review import review
+
+        await review(store.load_case(case_id), progress)
+    except Exception as e:
+        progress(f"Review fehlgeschlagen: {e}")
     for f in (store.case_dir(case_id) / "extraktionen").glob("_kons_*.json"):
         f.unlink()  # Teilkonsolidierungen gelten nur bis zum erfolgreichen Abschluss
     progress(f"gespeichert ({len(case.warnungen)} Validierungshinweise)")
