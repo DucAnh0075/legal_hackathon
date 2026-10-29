@@ -1,0 +1,20 @@
+# Geheimnisse und Umgebung
+.env
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# Fallergebnisse (können Akteninhalte enthalten) und Sicherungen
+aktenaufbereiter/cases/
+aktenaufbereiter/backups/
+
+# Vom Veranstalter gestellte Daten, nicht weiterverteilen
+Challenge 5/
+
+# Lokale Skills/Werkzeuge
+.claude/skills/
+.claude/agents/
+.impeccable/
+*:Zone.Identifier
