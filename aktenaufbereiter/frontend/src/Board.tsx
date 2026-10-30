@@ -1,10 +1,99 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useLayoutEffect, useRef, type ReactNode, type PointerEvent } from 'react'
 import { BaseEdge, MarkerType, EdgeLabelRenderer, getStraightPath, type EdgeProps, Background, Controls, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps, type NodeChange, applyNodeChanges } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { api, type Case, type BoardStruktur, type Fundstelle } from './api'
 import { useDocs } from './ctx'
 
 type Point = { x: number; y: number }
+type Leistenstand = Point & { zu: boolean }
+const LEISTENSTANDARD: Leistenstand = { x: 12, y: 12, zu: false }
+
+function leisteLesen(): Leistenstand {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem('board:leiste') ?? 'null')
+    if (v && typeof v === 'object' && 'x' in v && 'y' in v && 'zu' in v &&
+      typeof v.x === 'number' && Number.isFinite(v.x) && typeof v.y === 'number' && Number.isFinite(v.y) && typeof v.zu === 'boolean') {
+      return { x: v.x, y: v.y, zu: v.zu }
+    }
+  } catch { /* nur Komfort */ }
+  return LEISTENSTANDARD
+}
+
+function Boardleiste({ sichtbar, children }: { sichtbar: number; children: ReactNode }) {
+  const [stand, setStand] = useState(leisteLesen)
+  const [grenze, setGrenze] = useState<Point>({ x: 0, y: 0 })
+  const [zug, setZug] = useState<Point | null>(null)
+  const leiste = useRef<HTMLDivElement>(null)
+  const ziehen = useRef<{ id: number; start: Point; position: Point } | null>(null)
+  const begrenzen = (p: Point): Point => ({ x: Math.max(0, Math.min(p.x, grenze.x)), y: Math.max(0, Math.min(p.y, grenze.y)) })
+  const position = begrenzen(zug ?? stand)
+  const speichern = (next: Leistenstand) => {
+    setStand(next)
+    try { localStorage.setItem('board:leiste', JSON.stringify(next)) } catch { /* nur Komfort */ }
+  }
+
+  useLayoutEffect(() => {
+    const bar = leiste.current, wrap = bar?.parentElement
+    if (!bar || !wrap) return
+    const messen = () => {
+      const next = { x: Math.max(0, wrap.clientWidth - bar.offsetWidth), y: Math.max(0, wrap.clientHeight - bar.offsetHeight) }
+      setGrenze((old) => old.x === next.x && old.y === next.y ? old : next)
+    }
+    messen()
+    const observer = new ResizeObserver(messen)
+    observer.observe(wrap)
+    observer.observe(bar)
+    return () => observer.disconnect()
+  }, [stand.zu])
+
+  const zugposition = (e: PointerEvent<HTMLButtonElement>) => {
+    const drag = ziehen.current!
+    return begrenzen({ x: drag.position.x + e.clientX - drag.start.x, y: drag.position.y + e.clientY - drag.start.y })
+  }
+  const abbrechen = () => { ziehen.current = null; setZug(null) }
+  return <div ref={leiste} className="boardbar" style={{ left: position.x, top: position.y }}
+    onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    <button type="button" className={`boardbar-griff${zug ? ' zieht' : ''}`} aria-label="Leiste verschieben" title="Leiste verschieben (Pfeiltasten, Shift für größere Schritte)"
+      onPointerDown={(e) => {
+        if (e.button !== 0 || ziehen.current) return
+        e.preventDefault()
+        e.currentTarget.focus()
+        e.currentTarget.setPointerCapture(e.pointerId)
+        ziehen.current = { id: e.pointerId, start: { x: e.clientX, y: e.clientY }, position }
+        setZug(position)
+      }}
+      onPointerMove={(e) => { if (ziehen.current?.id === e.pointerId) setZug(zugposition(e)) }}
+      onPointerUp={(e) => {
+        if (ziehen.current?.id !== e.pointerId) return
+        speichern({ ...stand, ...zugposition(e) })
+        abbrechen()
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      }}
+      onPointerCancel={(e) => { if (ziehen.current?.id === e.pointerId) abbrechen() }}
+      onLostPointerCapture={abbrechen}
+      onKeyDown={(e) => {
+        const richtung: Record<string, Point> = { ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 }, ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 } }
+        const delta = richtung[e.key]
+        if (!delta) return
+        e.preventDefault(); e.stopPropagation()
+        if (ziehen.current) return
+        const schritt = e.shiftKey ? 64 : 16
+        speichern({ ...stand, ...begrenzen({ x: position.x + delta.x * schritt, y: position.y + delta.y * schritt }) })
+      }}>
+      <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor" aria-hidden="true">
+        {[5, 10, 15].flatMap((y) => [5, 11].map((x) => <circle key={`${x}:${y}`} cx={x} cy={y} r="1.5" />))}
+      </svg>
+    </button>
+    {stand.zu ? <span className="boardbar-anzeige">Anzeige <span aria-label={`${sichtbar} von 6 Ebenen sichtbar`}>{sichtbar}/6</span></span> :
+      <div className="boardbar-inhalt">{children}</div>}
+    <button type="button" className="boardbar-zu" aria-expanded={!stand.zu}
+      aria-label={stand.zu ? 'Leiste ausklappen' : 'Leiste einklappen'} title={stand.zu ? 'Leiste ausklappen' : 'Leiste einklappen'}
+      onClick={() => speichern({ ...stand, zu: !stand.zu })}>
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d={stand.zu ? 'M6 3.5 10.5 8 6 12.5' : 'M10 3.5 5.5 8 10 12.5'} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </button>
+  </div>
+}
+
 type Positions = Record<string, Point>
 type Thread = Edge<{ labelPos?: Point; title?: string; dim?: boolean; contra?: boolean; thin?: boolean; onSelect?: () => void }>
 
@@ -274,14 +363,14 @@ export function Board({ data, board = EMPTY_BOARD, suspects, onSuspects }: { dat
         <Controls showInteractive={false} />
       </ReactFlow>
 
-      <div className="boardbar">
+      <Boardleiste sichtbar={Object.values(show).filter(Boolean).length}>
         <button className="btn" onClick={() => { setSaved({}); api.saveLayout(caseId, { _v: 5 }) }}>Neu anordnen</button>
         {(Object.entries({ vertreter: 'Vertreter', zeugen: 'Zeugen', beweismittel: 'Beweismittel', weitere: 'Weitere Beteiligte', beziehungen: 'Beziehungen', widersprueche: 'Widersprüche' }) as [keyof typeof show, string][]).map(([k, label]) => (
           <label key={k} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
             <input type="checkbox" checked={show[k]} onChange={(e) => setShow({ ...show, [k]: e.target.checked })} />{label}
           </label>
         ))}
-      </div>
+      </Boardleiste>
 
       {selMeta && (
         <aside className="detail">

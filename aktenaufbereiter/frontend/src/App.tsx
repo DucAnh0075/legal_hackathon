@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, CalendarClock, Files, History, ListTree, Milestone, Moon, Network, Pin, Split, Sun, Tags, Users, type LucideIcon } from 'lucide-react'
+import { Archive, CalendarClock, Files, Globe, History, ListTree, Milestone, Moon, Network, Pin, Split, Sun, Tags, Users, type LucideIcon } from 'lucide-react'
 import { api, type CaseData, type Pool } from './api'
 import { Massenverfahren } from './Massenverfahren'
 import { Board } from './Board'
@@ -8,13 +8,14 @@ import { Fold, Ladeflaeche } from './components'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
+import { Extern } from './Extern'
 import { FragenFenster, useFragen } from './Fragen'
 import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
 import { LoeschMenu, LoeschDialog, aktenZiel, mvZiel, type LoeschZiel, type MenuStand } from './LoeschMenu'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
-type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
+type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'extern' | 'geschehen' | 'verfahren' | 'board'
 
 const NAV: { group: string; items: { id: View; label: string; icon: LucideIcon; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
@@ -31,6 +32,7 @@ const NAV: { group: string; items: { id: View; label: string; icon: LucideIcon; 
   { group: 'Analyse', items: [
     { id: 'board', label: 'Beweisboard', icon: Pin },
     { id: 'widersprueche', label: 'Widersprüche', icon: Split, count: (d) => d.case.widersprueche.length },
+    { id: 'extern', label: 'Externe Daten', icon: Globe },
   ] },
 ]
 
@@ -315,6 +317,7 @@ export default function App() {
           ) : view === 'geschehen' ? <GeschehenTimeline data={data.case} />
             : view === 'verfahren' ? (<><VerfahrenTimeline data={data.case} /><DataTable table={t.verfahren} /></>)
             : view === 'widersprueche' ? <Contradictions data={data.case} />
+            : view === 'extern' ? <Extern key={caseId} caseId={data.case.id} />
             : view === 'board' ? <div className="page" style={{ paddingBottom: 16 }}><header><h1>Beweisboard</h1><span className="sub">Karten verschieben, anklicken, Doppelklick öffnet das Beweismittel</span></header><Board key={caseId} data={data.case} board={data.board} suspects={data.suspects ?? {}} onSuspects={(suspects) => setData((d) => d?.case.id === data.case.id ? { ...d, suspects } : d)} /></div>
             : t[view] ? <DataTable key={view} table={t[view]} sub={view === 'akte' && data.case.warnungen.length ? `${data.case.warnungen.length} Validierungshinweise` : undefined} kopf={view === 'akte' ? <AktenKopf data={data.case} onAnsicht={setView} /> : undefined} />
             : <div className="page empty">Diese Ansicht gibt es für diese Akte nicht.</div>}

@@ -13,8 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import board, frage, pool, review, sammelakte, store, suche, view
+from . import board, extern, frage, pool, review, sammelakte, store, suche, view
 from .agent import Progress, run
+from .schemas import ExternAufruf
 from .export_xlsx import export
 from .tables import build
 from .marks import find_marks, marked_pdf
@@ -191,6 +192,60 @@ def put_annotation(case_id: str, row_id: str, body: AnnIn):
 def put_layout(case_id: str, layout: dict):
     _case(case_id)
     store.set_layout(case_id, layout)
+    return {"ok": True}
+
+
+extern_laeuft: set[str] = set()
+extern_ideen_locks: dict[str, asyncio.Lock] = {}
+
+
+@app.get("/api/cases/{case_id}/extern")
+def get_extern(case_id: str):
+    _case(case_id)
+    return {"berichte": store.get_extern(case_id).get("berichte", []), "laeuft": case_id in extern_laeuft}
+
+
+@app.get("/api/cases/{case_id}/extern/ideen")
+async def extern_ideen(case_id: str):
+    _case(case_id)
+    async with extern_ideen_locks.setdefault(case_id, asyncio.Lock()):
+        try:
+            return {"ideen": await extern.ideen(case_id)}
+        except Exception as e:
+            logging.getLogger(__name__).exception("Externe Ideen fehlgeschlagen")
+            raise HTTPException(502, "Einschätzung konnte nicht erstellt werden") from e
+
+
+class ExternAbrufIn(BaseModel):
+    auswahl: list[ExternAufruf] = []
+    anfrage: str = ""
+
+
+@app.post("/api/cases/{case_id}/extern/abruf")
+async def extern_abruf(case_id: str, body: ExternAbrufIn):
+    _case(case_id)
+    if not body.auswahl and not body.anfrage.strip():
+        raise HTTPException(400, "Auswahl oder Anfrage erforderlich")
+    if len(body.anfrage) > 500 or len(body.auswahl) > 40:
+        raise HTTPException(400, "Höchstens 500 Zeichen und 40 Einträge erlaubt")
+    if case_id in extern_laeuft:
+        raise HTTPException(409, "Abruf läuft bereits")
+    extern_laeuft.add(case_id)
+
+    async def arbeiten(progress: Progress):
+        try:
+            await extern.lauf(case_id, body.auswahl, body.anfrage.strip(), progress)
+        finally:
+            extern_laeuft.discard(case_id)
+
+    return {"job": await _start(arbeiten)}
+
+
+@app.delete("/api/cases/{case_id}/extern/{bericht_id}")
+async def extern_bericht_entfernen(case_id: str, bericht_id: str):
+    _case(case_id)
+    if not extern.bericht_entfernen(case_id, bericht_id):
+        raise HTTPException(404, "Bericht nicht gefunden")
     return {"ok": True}
 
 

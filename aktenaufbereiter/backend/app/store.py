@@ -72,6 +72,14 @@ def set_layout(case_id: str, layout: dict) -> None:
     _write_json(case_id, "board_layout.json", layout)
 
 
+def get_extern(case_id: str) -> dict:
+    return _json_file(case_id, "extern.json")
+
+
+def set_extern(case_id: str, data: dict) -> None:
+    _write_json(case_id, "extern.json", data)
+
+
 def sort_files(case_id: str, docs: list[Document]) -> None:
     """Kopiert die Originale sortiert: akte/<Blatt>_<ID>_<Typ>.<ext>"""
     out = case_dir(case_id) / "akte"
