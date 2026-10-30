@@ -100,6 +100,14 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
   return (
     <Page title="Aktenaufbereiter" sub="Akten einlesen, sortieren, Verzeichnisse und Beweisboard erzeugen">
       {pool && <>
+        {cases.length > 0 && (
+          <Fold id="aktenpool" className="section" title={<h2>Aktenpool<span className="count">{cases.length}</span></h2>}>
+            {cases.map((c) => (
+              <AkteZeile key={c.id} name={c.name} onOpen={() => onOpen(c.id)} onErgaenzen={() => setZiel({ id: c.id, name: c.name })}
+                stats={[`${c.dokumente} Aktenstücke`, `${c.personen} Personen`, `${c.widersprueche} Widersprüche`]} />
+            ))}
+          </Fold>
+        )}
         <Fold id="massenverfahren" className="section" title={<h2>Massenverfahren<span className="count">{pool.massenverfahren.length}</span></h2>}
           action={<button className="btn" disabled={busy} onClick={refreshPool}>Pool neu prüfen</button>}>
           {pool.massenverfahren.length === 0 && <p className="sub">Keine Massenverfahren erkannt.</p>}
@@ -123,14 +131,6 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
             </Fold>
           ))}
         </Fold>
-        {cases.length > 0 && (
-          <Fold id="aktenpool" className="section" title={<h2>Aktenpool<span className="count">{cases.length}</span></h2>}>
-            {cases.map((c) => (
-              <AkteZeile key={c.id} name={c.name} onOpen={() => onOpen(c.id)} onErgaenzen={() => setZiel({ id: c.id, name: c.name })}
-                stats={[`${c.dokumente} Aktenstücke`, `${c.personen} Personen`, `${c.widersprueche} Widersprüche`]} />
-            ))}
-          </Fold>
-        )}
         {ziel ? (
           <form className="form ergaenzung" ref={zielPanel} onSubmit={submit}>
             <h2>Ergänzung zu „{ziel.name}“</h2>

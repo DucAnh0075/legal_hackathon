@@ -4,26 +4,25 @@ import { useDocs } from './ctx'
 
 const FMT: Record<string, string> = { pdf_text: 'PDF', pdf_image: 'PDF (Scan)', image: 'Bild' }
 
-export function DocViewer({ data, docId, anchor, anchors, original, onClose }: { data: Case; docId: string; anchor?: string; anchors?: string[]; original?: boolean; onClose: () => void }) {
+export function DocViewer({ data, docId, anchor, anchors, onClose }: { data: Case; docId: string; anchor?: string; anchors?: string[]; onClose: () => void }) {
   const { caseId } = useDocs()
   const doc = data.dokumente.find((d) => d.id === docId)
   const reps = (doc?.representations ?? []).filter((r) => r.format !== 'md')
+  // Mit Original nur das Original; die Textansicht bleibt Dokumenten ohne Original
+  const [gewaehlt, setGewaehlt] = useState<string | null>(null)
+  const tab: string = reps.find((r) => r.format === gewaehlt)?.format ?? reps[0]?.format ?? 'text'
   const hasText = !!doc?.text_lines.length
-  const [tab, setTab] = useState<string>('text')
   const [zoom, setZoom] = useState(false)
 
   const lines = anchors ?? (anchor ? [anchor] : [])
   const lineKey = JSON.stringify(lines)
-  const firstFormat = reps[0]?.format
   const requestKey = JSON.stringify([caseId, docId, lineKey, tab])
   const [result, setResult] = useState<{ key: string; marks?: Marks; error?: boolean } | null>(null)
   const current = result?.key === requestKey ? result : null
   const marks = current?.marks
   const marking = lines.length > 0 && tab !== 'text'
 
-  useEffect(() => {
-    setTab(original && firstFormat ? firstFormat : hasText ? 'text' : firstFormat ?? 'text'); setZoom(false)
-  }, [caseId, docId, lineKey, original, hasText, firstFormat])
+  useEffect(() => { setZoom(false) }, [caseId, docId, lineKey])
   useEffect(() => {
     const first = (JSON.parse(lineKey) as string[])[0]
     if (tab === 'text' && first) document.getElementById(`ln-${first}`)?.scrollIntoView({ block: 'center', behavior: 'instant' })
@@ -58,19 +57,26 @@ export function DocViewer({ data, docId, anchor, anchors, original, onClose }: {
           <span>Eingang: {doc.eingangsdatum?.anzeige ?? 'nicht angegeben'}</span>
         </div>
       </header>
-      <div className="tabs" role="tablist">
-        {hasText && <button role="tab" className="tab" aria-selected={tab === 'text'} onClick={() => setTab('text')}>Text</button>}
+      {reps.length > 1 && <div className="tabs" role="tablist">
         {reps.map((r) => (
-          <button key={r.format} role="tab" className="tab" aria-selected={tab === r.format} onClick={() => setTab(r.format)}>
-            Original · {FMT[r.format]}
+          <button key={r.format} role="tab" className="tab" aria-selected={tab === r.format} onClick={() => setGewaehlt(r.format)}>
+            {FMT[r.format]}
           </button>
         ))}
-      </div>
+      </div>}
       {marking && <div className="mark-status" role="status">
         {!current && <span>Fundstellen werden markiert …</span>}
         {current?.error && <span>Fundstellen konnten nicht geladen werden. Bitte das Dokument schließen und erneut öffnen.</span>}
         {!!marks?.found.length && <span>{marks.found.length} Fundstelle(n) markiert</span>}
-        {!!marks?.missing.length && <span>{marks.missing.length} Stelle(n) im Original nicht lokalisiert – {hasText ? <><button className="text-link" onClick={() => setTab('text')}>im Text-Tab</button> markiert</> : 'kein Text-Tab verfügbar'}</span>}
+        {!!marks?.missing.length && <>
+          <span>{marks.missing.length} Stelle(n) im Original nicht lokalisiert:</span>
+          <ul className="mark-missing">
+            {marks.missing.map((a) => {
+              const text = doc.text_lines.find((l) => l.anchor === a)?.text
+              return <li key={a}><b>{a}</b>{text ? ` „${text}“` : ''}</li>
+            })}
+          </ul>
+        </>}
       </div>}
       <div className="body" style={tab !== 'text' && rep?.format !== 'image' ? { padding: 0 } : undefined}>
         {tab === 'text' && (hasText ? doc.text_lines.map((l, i) => (

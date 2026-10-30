@@ -259,7 +259,7 @@ export function Board({ data, board = EMPTY_BOARD, suspects, onSuspects }: { dat
     <div className="boardwrap cork">
       <ReactFlow key={`${[...visible].join()}|${Object.keys(layout).length ? 'ready' : 'wait'}`} nodes={nodes} edges={styled} nodeTypes={nodeTypes} onNodesChange={onNodesChange} fitView fitViewOptions={{ padding: { top: '120px', left: '40px', right: '40px', bottom: '40px' }, maxZoom: 1 }} minZoom={0.15} maxZoom={1.8}
         onNodeClick={(_, n) => { if (n.data.kind !== 'heading') setSel(n.id === sel ? null : n.id) }} onPaneClick={() => setSel(null)}
-        onNodeDoubleClick={(_, n) => metas.get(n.id)?.kind === 'doc' && open(n.id, undefined, { original: true })}
+        onNodeDoubleClick={(_, n) => metas.get(n.id)?.kind === 'doc' && open(n.id)}
         onNodeDragStop={(_, n) => { const next = { ...layout, ...Object.fromEntries(nodes.map((x) => [x.id, x.position])), [n.id]: n.position }; setLayout(next); setSaved(next); api.saveLayout(caseId, { ...next, _v: 5 }) }}
         edgeTypes={edgeTypes} proOptions={{ hideAttribution: true }}>
         <Background gap={40} size={0} />
@@ -302,13 +302,13 @@ export function Board({ data, board = EMPTY_BOARD, suspects, onSuspects }: { dat
           )}
           <b style={{ fontSize: 12.5 }}>Fundstellen</b>
           <div className="row">
-            {selMeta.kind === 'doc' ? <button className="btn primary" onClick={() => open(selMeta.id, undefined, { original: true })}>Datei öffnen</button> : null}
+            {selMeta.kind === 'doc' ? <button className="btn primary" onClick={() => open(selMeta.id)}>Datei öffnen</button> : null}
             {[...new Set(selMeta.fund.map((f) => f.doc_id))].map((id) => {
               const fund = selMeta.fund.filter((f) => f.doc_id === id)
               const anchors = [...new Set(fund.flatMap((f) => f.line ? [f.line] : []))]
               const blatt = fund[0]?.blatt
               return <button key={id} className="btn" title={fund.some((f) => f.unklar) ? 'Fundstelle unklar' : undefined}
-                onClick={() => open(id, anchors[0], { anchors, original: true })}>
+                onClick={() => open(id, anchors[0], { anchors })}>
                 {id}{blatt ? ` · ${/^(Bl|S)\./.test(blatt) ? blatt : `Bl. ${blatt}`}` : ''} · {anchors.length} {anchors.length === 1 ? 'Stelle' : 'Stellen'}
               </button>
             })}

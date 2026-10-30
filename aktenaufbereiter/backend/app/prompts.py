@@ -207,6 +207,7 @@ def pool_prompt(profile_json: str) -> str:
     return f"""Erkenne Massenverfahren ausschließlich anhand der Aktenprofile, ohne Wertung.
 Eine Gruppe umfasst mindestens zwei Akten mit DERSELBEN Gegenseite (Schreibvarianten derselben Firma zählen gleich) UND DEMSELBEN Lebenssachverhalt: etwa derselbe Flug am selben Tag, dasselbe zurückgerufene Produkt bzw. dieselbe Charge oder dasselbe Schadensereignis.
 Gleiche Branche, gleiche Gegenseite allein oder gleiche Rechtsfrage reichen NICHT. Bei fehlenden Angaben keine Gemeinsamkeit vermuten.
+Ein Massenverfahren setzt verschiedene Anspruchsteller bzw. Anzeigende voraus. Akten mit derselben Aktivseite und demselben Inhalt (doppelt eingelesene Akten, mehrere Fassungen desselben Verfahrens) bilden KEINE Gruppe.
 sache: kurze neutrale Bezeichnung, etwa "Flug NB 4711 vom 14.11.2025" oder "VitaKids Getreidebrei, Charge 24-117".
 gemeinsamkeiten: kurze sachliche Punkte, nur was in allen zugehörigen Profilen steht. Jede Akte höchstens einer Gruppe zuordnen; nur übergebene case_ids verwenden.
 

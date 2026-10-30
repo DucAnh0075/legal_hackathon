@@ -76,18 +76,19 @@ async def profil(case: Case) -> FallProfil:
 async def gruppen(profile: dict[str, FallProfil], namen: dict[str, str]) -> list[dict]:
     profile = {cid: p for cid, p in profile.items()
                if (case := store.load_case(cid)) is None or case.massenverfahren is None}
-    data = {cid: p.model_dump() for cid, p in sorted(profile.items())}
-    digest = hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-    path = config.CASES_DIR / "massenverfahren.json"
-    cache = _lesen(path)
-    if cache.get("hash") == digest:
-        return cache["gruppen"]
     eingabe = [{"case_id": cid, "name": namen.get(cid, cid),
                 **p.model_dump(include={"verfahrensart", "aktivseite", "gegenseite", "gegenstand"}),
                 "merkmale": [m.model_dump(include={"art", "wert"}) for m in p.merkmale]}
                for cid, p in sorted(profile.items())]
-    out = await llm.ask(config.MODEL_CONSOLIDATE, SYSTEM_POOL,
-                        pool_prompt(json.dumps(eingabe, ensure_ascii=False, separators=(",", ":"))),
+    prompt = pool_prompt(json.dumps(eingabe, ensure_ascii=False, separators=(",", ":")))
+    # der Prompt gehört zum Hash, damit eine geänderte Regel neu gruppiert
+    data = {cid: p.model_dump() for cid, p in sorted(profile.items())}
+    digest = hashlib.sha256((json.dumps(data, ensure_ascii=False, sort_keys=True) + prompt).encode()).hexdigest()
+    path = config.CASES_DIR / "massenverfahren.json"
+    cache = _lesen(path)
+    if cache.get("hash") == digest:
+        return cache["gruppen"]
+    out = await llm.ask(config.MODEL_CONSOLIDATE, SYSTEM_POOL, prompt,
                         PoolGruppen, max_tokens=4000) if len(profile) >= 2 else PoolGruppen()
     bisher = {cid: g["id"] for g in cache.get("gruppen", []) for cid in g["mitglieder"]}
     ergebnis, vergeben = [], set()

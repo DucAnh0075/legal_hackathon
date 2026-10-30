@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CaseData, type Pool } from './api'
 import { Massenverfahren } from './Massenverfahren'
 import { Board } from './Board'
+import { Fold } from './components'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
@@ -67,10 +68,11 @@ export default function App() {
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
   const [view, setView] = useState<View>('start')
-  const [doc, setDoc] = useState<{ id: string; anchor?: string; anchors?: string[]; original?: boolean } | null>(null)
+  const [doc, setDoc] = useState<{ id: string; anchor?: string; anchors?: string[] } | null>(null)
   const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
   const [job, setJob] = useState<JobState | null>(null)
   const [now, setNow] = useState(Date.now())
+  const [suche, setSuche] = useState('')
 
   useEffect(() => {
     if (!job?.busy) return
@@ -116,6 +118,14 @@ export default function App() {
   const ctx = useMemo(() => ({ open: ((id, anchor, opts) => { if (id) setDoc({ id, anchor, ...opts }) }) as OpenDoc, caseId: caseId ?? '' }), [caseId])
   const t = data?.tables
   const mv = pool?.massenverfahren.find((m) => m.id === mvId)
+  const woerter = suche.toLocaleLowerCase('de').split(/\s+/).filter(Boolean)
+  const filtert = woerter.length > 0
+  const trifft = (...felder: string[]) => {
+    const text = felder.join(' ').toLocaleLowerCase('de')
+    return woerter.every((w) => text.includes(w))
+  }
+  const einzel = (pool?.einzel ?? []).filter((c) => trifft(c.name, c.id))
+  const gruppen = (pool?.massenverfahren ?? []).filter((m) => trifft(m.sache, ...m.mitglieder.map((a) => a.name)))
   const openMv = (id: string) => { setMvId(id); setView('mv'); setDoc(null) }
   const poolPruefen = async () => {
     try {
@@ -130,15 +140,27 @@ export default function App() {
         <nav className="side" aria-label="Navigation">
           <div className="brand">Aktenaufbereiter</div>
           <div className="casename">{data?.case.name ?? 'Keine Akte geöffnet'}</div>
-          <div className="nav-group">Aktenpool</div>
-          <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}>
-            Alle Akten<span className="n">{pool?.einzel.length ?? 0}</span>
-          </button>
-          {pool?.massenverfahren.map((m) => (
-            <button key={m.id} className="nav" title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
-              <span className="nav-label"><small>Massenverfahren in Sache</small>{m.sache}</span><span className="n">{m.mitglieder.length}</span>
-            </button>
-          ))}
+          <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}>Übersicht</button>
+          <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
+          {einzel.length > 0 && (
+            <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
+              {einzel.map((c) => (
+                <button key={c.id} className="nav" title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
+                  <span className="nav-label">{c.name}</span>
+                </button>
+              ))}
+            </Fold>
+          )}
+          {gruppen.length > 0 && (
+            <Fold id="side:massenverfahren" forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
+              {gruppen.map((m) => (
+                <button key={m.id} className="nav" title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
+                  <span className="nav-label">{m.sache}</span><span className="n">{m.mitglieder.length}</span>
+                </button>
+              ))}
+            </Fold>
+          )}
+          {filtert && !einzel.length && !gruppen.length && <p className="side-empty">Keine Treffer</p>}
           {data && NAV.map((g) => (
             <div key={g.group} style={{ display: 'contents' }}>
               <div className="nav-group">{g.group}</div>
@@ -191,7 +213,7 @@ export default function App() {
             : <DataTable key={view} table={t[view]} sub={view === 'akte' && data.case.warnungen.length ? `${data.case.warnungen.length} Validierungshinweise` : undefined} />}
         </main>
 
-        {doc && data && <DocViewer data={data.case} docId={doc.id} anchor={doc.anchor} anchors={doc.anchors} original={doc.original} onClose={() => setDoc(null)} />}
+        {doc && data && <DocViewer data={data.case} docId={doc.id} anchor={doc.anchor} anchors={doc.anchors} onClose={() => setDoc(null)} />}
       </div>
     </DocCtx.Provider>
   )
