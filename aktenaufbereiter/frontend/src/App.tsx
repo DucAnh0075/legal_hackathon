@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CaseData, type Pool } from './api'
 import { Massenverfahren } from './Massenverfahren'
 import { Board } from './Board'
@@ -29,8 +29,40 @@ const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseDa
   ] },
 ]
 
+type Notice = { text: string; warn?: boolean; mvId?: string; retry?: boolean }
+
+const mitgliedIds = (p: Pool) => new Set(p.massenverfahren.flatMap((m) => m.mitglieder.map((a) => a.case_id)))
+
+/** Meldung nach einem Lauf: wohin die Akte gehört, oder was die Pool-Prüfung ergeben hat. */
+function zuordnung(id: string, p: Pool, vorher: Pool | null, log: string[]): Notice {
+  if (!id) {
+    const uebersprungen = log.filter((l) => /^Profil .+ übersprungen/.test(l)).length
+    const alt = vorher ? mitgliedIds(vorher) : null
+    const neu = alt ? [...mitgliedIds(p)].filter((x) => !alt.has(x)).length : 0
+    return {
+      text: `Pool geprüft: ${p.massenverfahren.length} Massenverfahren, ${neu === 0 ? 'keine Akte' : neu === 1 ? '1 Akte' : `${neu} Akten`} neu zugeordnet.`
+        + (uebersprungen ? ` ${uebersprungen === 1 ? '1 Akte konnte' : `${uebersprungen} Akten konnten`} nicht geprüft werden.` : ''),
+      warn: uebersprungen > 0,
+    }
+  }
+  const treffer = p.massenverfahren.find((m) => m.mitglieder.some((a) => a.case_id === id))
+  const name = treffer?.mitglieder.find((a) => a.case_id === id)?.name ?? p.einzel.find((c) => c.id === id)?.name ?? id
+  if (log.some((l) => l.startsWith('Pool-Prüfung fehlgeschlagen') || l.startsWith(`Profil ${id} übersprungen`))) {
+    return { text: `„${name}“ wurde aufbereitet, die Zuordnung konnte nicht geprüft werden.`, warn: true, retry: true }
+  }
+  if (!treffer) return { text: `„${name}“ steht als Einzelakte im Aktenpool. Kein Massenverfahren erkannt.` }
+  const bisher = vorher?.massenverfahren.some((m) => m.id === treffer.id && m.mitglieder.some((a) => a.case_id === id))
+  const offen = treffer.sammelakte_id && treffer.neue_mitglieder.includes(id) ? ' Noch nicht in der Sammelakte.' : ''
+  return {
+    text: `„${name}“ ${bisher ? 'gehört zum' : 'wurde dem'} Massenverfahren in Sache „${treffer.sache}“${bisher ? '' : ' zugeordnet'} (${treffer.mitglieder.length} Akten).${offen}`,
+    mvId: treffer.id,
+  }
+}
+
 export default function App() {
   const [pool, setPool] = useState<Pool | null>(null)
+  const poolRef = useRef<Pool | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [mvId, setMvId] = useState<string | null>(null)
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
@@ -52,6 +84,7 @@ export default function App() {
     api.pool().then(setPool).catch(() => setPool({ einzel: [], massenverfahren: [] })),
   ]), [])
   useEffect(() => { refresh() }, [refresh])
+  useEffect(() => { poolRef.current = pool }, [pool])
 
   const load = useCallback(async (id: string, v: View = 'akte') => {
     setData(await api.get(id)); setCaseId(id); setView(v); setDoc(null); refresh()
@@ -60,12 +93,22 @@ export default function App() {
   // Agentenlauf: Fortschritt per SSE, unabhängig von der gerade offenen Ansicht
   const startJob = useCallback((jobId: string, id: string, open = true) => {
     setJob({ caseId: id, log: [], busy: true, error: '', started: Date.now() })
+    setNotice(null)
+    const vorher = poolRef.current
+    const log: string[] = []
     const es = new EventSource(`/api/jobs/${jobId}/events`)
     es.onmessage = (m) => {
       const ev = JSON.parse(m.data)
-      if (ev.msg) setJob((j) => j && { ...j, log: [...j.log, ev.msg] })
+      if (ev.msg) { log.push(ev.msg); setJob((j) => j && { ...j, log: [...j.log, ev.msg] }) }
       if (ev.error) { es.close(); setJob((j) => j && { ...j, busy: false, error: ev.error }); refresh() }
-      if (ev.done) { es.close(); setJob((j) => j && { ...j, busy: false }); refresh(); if (open) load(id).catch((err) => setJob((j) => j && { ...j, error: String(err) })) }
+      if (ev.done) {
+        es.close(); setJob((j) => j && { ...j, busy: false })
+        if (id.startsWith('sammel-')) refresh()
+        else api.pool()
+          .then((p) => { setPool(p); setNotice(zuordnung(id, p, vorher, log)) })
+          .catch(() => setNotice({ text: 'Die Zuordnung konnte nicht geprüft werden.', warn: true, retry: true }))
+        if (open) load(id).catch((err) => setJob((j) => j && { ...j, error: String(err) }))
+      }
     }
     es.onerror = () => { es.close(); setJob((j) => j && { ...j, busy: false, error: j.error || 'Verbindung zum Agenten unterbrochen.' }); refresh() }
   }, [load, refresh])
@@ -74,6 +117,12 @@ export default function App() {
   const t = data?.tables
   const mv = pool?.massenverfahren.find((m) => m.id === mvId)
   const openMv = (id: string) => { setMvId(id); setView('mv'); setDoc(null) }
+  const poolPruefen = async () => {
+    try {
+      const { job } = await api.refreshPool()
+      startJob(job, '', false)
+    } catch (err) { setNotice({ text: `Pool-Prüfung nicht gestartet: ${err}`, warn: true, retry: true }) }
+  }
 
   return (
     <DocCtx.Provider value={ctx}>
@@ -119,6 +168,18 @@ export default function App() {
         </nav>
 
         <main className="main">
+          <div className="notice-slot" role="status">
+            {notice && (
+              <div className={`notice ${notice.warn ? 'warn' : ''}`}>
+                <span>{notice.text}</span>
+                {notice.mvId && <button className="btn" onClick={() => { openMv(notice.mvId!); setNotice(null) }}>Massenverfahren öffnen</button>}
+                {notice.retry && <button className="btn" disabled={job?.busy} onClick={poolPruefen}>Pool neu prüfen</button>}
+                <button className="btn ghost notice-close" aria-label="Meldung schließen" onClick={() => setNotice(null)}>
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                </button>
+              </div>
+            )}
+          </div>
           {view === 'mv' && mv ? (
             <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
           ) : view === 'start' || view === 'mv' || !data || !t ? (
