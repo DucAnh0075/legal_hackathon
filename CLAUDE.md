@@ -59,4 +59,4 @@ Gilt erst, wenn der Nutzer "Orchestrator-Modus an" schreibt, und bis "Orchestrat
 - **Selbst erledigen:** Git, Planung, Review, `CLAUDE.md` und `AGENTS.md`. Commits nur auf Anweisung des Nutzers.
 
 ## Design
-Frontend-Arbeit mit den Skills `impeccable` (Operate-Modus) und `emil-design-eng`; Detektor: `.claude/skills/impeccable/scripts/impeccable detect --json aktenaufbereiter/frontend/src`. Beweisboard = Kork-Pinnwand mit Karten und roten Fäden; sonst ruhiges Kanzlei-Dossier, hell/dunkel.
+Frontend-Arbeit mit den Skills `impeccable` (Operate-Modus) und `emil-design-eng`; ergänzend `design-taste-frontend` (nur `references/app-screens.md`, kein `assets.mjs`) und `ui-ux-pro-max` (nur UX-Regeln nachschlagen, keine Stile oder Paletten, kein `--persist`). `PRODUCT.md` und die harten Regeln gehen immer vor. Detektor: `.claude/skills/impeccable/scripts/impeccable detect --json aktenaufbereiter/frontend/src`. Beweisboard = Kork-Pinnwand mit Karten und roten Fäden; sonst ruhiges Kanzlei-Dossier, hell/dunkel.

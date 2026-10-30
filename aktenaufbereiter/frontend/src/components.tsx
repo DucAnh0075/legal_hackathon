@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Fundstelle } from './api'
 import { useDocs } from './ctx'
 
@@ -22,22 +23,70 @@ export function FundChips({ items }: { items: Fundstelle[] }) {
         const key = `${f.doc_id}:${f.line ?? ''}`
         if (seen.has(key)) return null
         seen.add(key)
-        return (
-          <button key={i} className={`chip link ${f.unklar ? 'warn' : ''}`} onClick={() => open(f.doc_id, f.line ?? undefined)}
-            title={f.unklar ? 'Fundstelle unklar' : 'Original öffnen'}>
-            {f.blatt ? `${f.blatt} · ` : ''}{f.line ?? f.doc_id}{f.unklar ? ' ?' : ''}
-          </button>
-        )
+        return <FundMarke key={i} docId={f.doc_id} anker={f.line ?? undefined} blatt={f.blatt} unklar={f.unklar} onClick={() => open(f.doc_id, f.line ?? undefined)} />
       })}
     </>
   )
 }
+
+let zuletztGeschlossen = 0
+
+/** Fundstelle als Aktenmarke; beim Überfahren oder Fokus zeigt sie die Aktenzeile. */
+function FundMarke({ docId, anker, blatt, unklar, onClick }: { docId: string; anker?: string; blatt?: string | null; unklar: boolean; onClick: React.MouseEventHandler<HTMLButtonElement> }) {
+  const { dokumente } = useDocs()
+  const [ort, setOrt] = useState<{ x: number; y: number; oben: boolean; sofort: boolean } | null>(null)
+  const timer = useRef(0)
+  const id = useId()
+  const doc = dokumente.find((d) => d.id === docId)
+  const zeile = anker ? doc?.text_lines.find((l) => l.anchor === anker)?.text : undefined
+  const hatVorschau = !!(doc && (zeile || doc.title))
+
+  const zeigen = (el: HTMLElement) => {
+    if (!hatVorschau) return
+    const r = el.getBoundingClientRect()
+    const sofort = Date.now() - zuletztGeschlossen < 400 // Nachbarmarken ohne erneute Wartezeit
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setOrt({ x: Math.max(8, Math.min(r.left, innerWidth - 368)), y: r.top > 150 ? r.top - 6 : r.bottom + 6, oben: r.top > 150, sofort }), sofort ? 0 : 300)
+  }
+  const verbergen = () => {
+    window.clearTimeout(timer.current)
+    setOrt((o) => { if (o) zuletztGeschlossen = Date.now(); return null })
+  }
+  useEffect(() => {
+    if (!ort) return
+    window.addEventListener('scroll', verbergen, true)
+    return () => window.removeEventListener('scroll', verbergen, true)
+  }, [ort])
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  return (
+    <>
+      <button className={`chip link ${unklar ? 'warn' : ''}`} aria-describedby={ort ? id : undefined} title={unklar ? 'Fundstelle unklar' : undefined}
+        onClick={(e) => { verbergen(); onClick(e) }}
+        onPointerEnter={(e) => { if (e.pointerType === 'mouse') zeigen(e.currentTarget) }} onPointerLeave={verbergen}
+        onFocus={(e) => { if (e.currentTarget.matches(':focus-visible')) zeigen(e.currentTarget) }} onBlur={verbergen}
+        onKeyDown={(e) => { if (e.key === 'Escape') verbergen() }}>
+        {blatt ? `${blatt} · ` : ''}{anker ?? docId}{unklar ? ' ?' : ''}
+      </button>
+      {ort && createPortal(
+        <div id={id} role="tooltip" className={`fund-vorschau ${ort.oben ? 'oben' : ''} ${ort.sofort ? 'sofort' : ''}`} style={{ left: ort.x, top: ort.y }}>
+          <span className="fund-titel">{docId}{doc?.title ? ` · ${doc.title}` : ''}</span>
+          {zeile && <p>{zeile}</p>}
+        </div>, document.body)}
+    </>
+  )
+}
+
+/** Datum mit Hinweis in Klammern: Der Hinweis bleibt sichtbar, macht die Spalte aber nicht breit. */
+const DATUM_HINWEIS = /^(\d{2}\.\d{2}\.\d{4}(?: \d{2}:\d{2})?) \((.+)\)$/
 
 /** Zellen mit "Bl. 3 (A01:L04); Bl. 5 (A06)" werden zu klickbaren Chips. */
 const PART = /^(.*?)\s*\(([A-Z]\d{2}(?::L\d+)?)\)(\s*\[Fundstelle unklar\])?$/
 export function CellContent({ value }: { value: string | number }) {
   const { open } = useDocs()
   if (typeof value !== 'string') return <>{value}</>
+  const datum = DATUM_HINWEIS.exec(value)
+  if (datum) return <>{datum[1]}<small className="datum-hinweis">{datum[2]}</small></>
   const parts = value.split('; ')
   const matches = parts.map((p) => PART.exec(p))
   if (!parts.length || !matches.every(Boolean)) return <>{value}</>
@@ -45,12 +94,9 @@ export function CellContent({ value }: { value: string | number }) {
     <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
       {matches.map((m, i) => {
         const [, blatt, ref, unklar] = m!
-        return (
-          <button key={i} className={`chip link ${unklar ? 'warn' : ''}`}
-            onClick={(e) => { e.stopPropagation(); open(ref.split(':')[0], ref.includes(':') ? ref : undefined) }}>
-            {blatt ? `${blatt} · ` : ''}{ref}{unklar ? ' ?' : ''}
-          </button>
-        )
+        const anker = ref.includes(':') ? ref : undefined
+        return <FundMarke key={i} docId={ref.split(':')[0]} anker={anker} blatt={blatt} unklar={!!unklar}
+          onClick={(e) => { e.stopPropagation(); open(ref.split(':')[0], anker) }} />
       })}
     </span>
   )
@@ -82,6 +128,18 @@ export function Fold({ id, title, action, defaultOpen = true, forceOpen = false,
         <div className="fold-body">{children}</div>
       </details>
       {action && <div className="fold-action">{action}</div>}
+    </div>
+  )
+}
+
+/** Platzhalter, während eine Akte lädt. */
+export function Ladeflaeche() {
+  return (
+    <div className="page ladeflaeche" role="status" aria-label="Akte wird geladen">
+      <div className="skelett skelett-titel" />
+      <div className="skelett-tabelle">
+        {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="skelett skelett-zeile" />)}
+      </div>
     </div>
   )
 }

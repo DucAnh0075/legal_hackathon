@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import { api, type Table } from './api'
 import { CellContent, Page } from './components'
 import { useDocs } from './ctx'
@@ -9,7 +10,7 @@ const sortKey = (v: string | number) => {
   return m ? `${m[3]}${m[2]}${m[1]}${v.slice(10)}` : v.toLowerCase()
 }
 
-export function DataTable({ table, extra, sub }: { table: Table; extra?: React.ReactNode; sub?: string }) {
+export function DataTable({ table, extra, sub, kopf }: { table: Table; extra?: React.ReactNode; sub?: string; kopf?: React.ReactNode }) {
   const { open, caseId } = useDocs()
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<{ col: number; dir: 1 | -1 } | null>(null)
@@ -30,6 +31,8 @@ export function DataTable({ table, extra, sub }: { table: Table; extra?: React.R
     const tsv = [table.cols, ...rows.map((r) => r.cells)].map((r) => r.map((c) => String(c).replace(/\s+/g, ' ')).join('\t')).join('\n')
     navigator.clipboard.writeText(tsv)
   }
+  // Kurze Spalten bleiben einzeilig, damit der Text Platz bekommt
+  const eng = useMemo(() => table.cols.map((_, i) => table.rows.every((r) => String(r.cells[i] ?? '').replace(/ \(.*\)$/, '').length <= 24)), [table])
   const annField = (c: string) => (c === 'Anmerkung Kanzlei' ? 'kanzlei' : c === 'Anmerkung Mandant' ? 'mandant' : null)
 
   return (
@@ -41,6 +44,7 @@ export function DataTable({ table, extra, sub }: { table: Table; extra?: React.R
         <a className="btn primary" href={api.xlsxUrl(caseId)} style={{ textDecoration: 'none' }}>Excel-Export</a>
       </>
     }>
+      {kopf}
       {rows.length === 0 ? (
         <div className="empty">Keine Einträge in der Akte.</div>
       ) : (
@@ -51,7 +55,7 @@ export function DataTable({ table, extra, sub }: { table: Table; extra?: React.R
                 {table.cols.map((c, i) => (
                   <th key={i} aria-sort={sort?.col === i ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}>
                     <button onClick={() => setSort(sort?.col === i && sort.dir === 1 ? { col: i, dir: -1 } : { col: i, dir: 1 })}>
-                      {c}{sort?.col === i ? (sort.dir === 1 ? ' ↑' : ' ↓') : ''}
+                      {c}{sort?.col === i && (sort.dir === 1 ? <ArrowUp size={12} aria-hidden /> : <ArrowDown size={12} aria-hidden />)}
                     </button>
                   </th>
                 ))}
@@ -69,7 +73,9 @@ export function DataTable({ table, extra, sub }: { table: Table; extra?: React.R
                           onBlur={(e) => { if (e.target.value !== String(c)) api.annotate(caseId, r.id.replace(/-\d+$/, ''), f, e.target.value) }} />
                       </td>
                     ) : (
-                      <td key={i}><CellContent value={c} /></td>
+                      <td key={i} className={eng[i] ? 'eng' : undefined}>
+                        {typeof c === 'string' && c.length > 220 ? <div className="zelle-lang"><CellContent value={c} /></div> : <CellContent value={c} />}
+                      </td>
                     )
                   })}
                 </tr>

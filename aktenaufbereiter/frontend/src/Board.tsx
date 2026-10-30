@@ -221,6 +221,14 @@ export function Board({ data, board = EMPTY_BOARD, suspects, onSuspects }: { dat
 
   useEffect(() => { let active = true; api.get(caseId).then((d) => { if (active) setSaved(readLayout(d.layout)) }).catch(() => { if (active) setSaved({}) }); return () => { active = false } }, [caseId])
   useEffect(() => { if (saved) setLayout({ ...grundlayout(board), ...saved }) }, [board, saved])
+  // Karten und Fäden erscheinen nur beim ersten Aufbau mit Bewegung, nicht bei jedem Filterwechsel
+  const [frisch, setFrisch] = useState(true)
+  const bereit = Object.keys(layout).length > 0
+  useEffect(() => {
+    if (!bereit) return
+    const t = setTimeout(() => setFrisch(false), 900)
+    return () => clearTimeout(t)
+  }, [bereit])
 
   // Nachbarn der Auswahl
   const near = useMemo(() => {
@@ -256,7 +264,7 @@ export function Board({ data, board = EMPTY_BOARD, suspects, onSuspects }: { dat
   const links = sel ? edges.filter((e) => (e.source === sel || e.target === sel) && e.className !== 'thin') : []
 
   return (
-    <div className="boardwrap cork">
+    <div className={`boardwrap cork${frisch ? ' frisch' : ''}`}>
       <ReactFlow key={`${[...visible].join()}|${Object.keys(layout).length ? 'ready' : 'wait'}`} nodes={nodes} edges={styled} nodeTypes={nodeTypes} onNodesChange={onNodesChange} fitView fitViewOptions={{ padding: { top: '120px', left: '40px', right: '40px', bottom: '40px' }, maxZoom: 1 }} minZoom={0.15} maxZoom={1.8}
         onNodeClick={(_, n) => { if (n.data.kind !== 'heading') setSel(n.id === sel ? null : n.id) }} onPaneClick={() => setSel(null)}
         onNodeDoubleClick={(_, n) => metas.get(n.id)?.kind === 'doc' && open(n.id)}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Pool } from './api'
 import { api } from './api'
 import { Fold, Page } from './components'
+import { Lauf } from './Lauf'
 import { aktenZiel, mvZiel, type LoeschZiel } from './LoeschMenu'
 
 export type JobState = { caseId: string; log: string[]; busy: boolean; error: string; started: number }
@@ -103,7 +104,7 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart, onMenu }:
   const absenden = (label: string) => <button className="btn primary" disabled={busy}>{busy ? <><i className="spinner" aria-hidden /> Agent arbeitet …</> : label}</button>
 
   return (
-    <Page title="Aktenaufbereiter" sub="Akten einlesen, sortieren, Verzeichnisse und Beweisboard erzeugen">
+    <Page title="Übersicht" sub="Akten einlesen, sortieren, Verzeichnisse und Beweisboard erzeugen">
       {pool && <>
         {cases.length > 0 && (
           <Fold id="aktenpool" className="section" title={<h2>Aktenpool<span className="count">{cases.length}</span></h2>}>
@@ -160,12 +161,7 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart, onMenu }:
           </Fold>
         )}
       </>}
-      {(log.length > 0 || error) && (
-        <div className="log" role="log" aria-live="polite">
-          {log.map((l, i) => <div key={i}>{l}</div>)}
-          {error && <div className="err">Fehler: {error}</div>}
-        </div>
-      )}
+      {(log.length > 0 || error) && <Lauf log={log} busy={!!job?.busy} error={error} />}
     </Page>
   )
 }

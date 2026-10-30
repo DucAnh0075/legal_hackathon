@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Archive, CalendarClock, Files, History, ListTree, Milestone, Moon, Network, Pin, Split, Sun, Tags, Users, type LucideIcon } from 'lucide-react'
 import { api, type CaseData, type Pool } from './api'
 import { Massenverfahren } from './Massenverfahren'
 import { Board } from './Board'
-import { Fold } from './components'
+import { AktenKopf } from './AktenKopf'
+import { Fold, Ladeflaeche } from './components'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
@@ -14,23 +16,42 @@ import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
 type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
 
-const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseData) => number }[] }[] = [
+const NAV: { group: string; items: { id: View; label: string; icon: LucideIcon; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
-    { id: 'akte', label: 'Aktenübersicht', count: (d) => d.case.dokumente.length },
-    { id: 'personen', label: 'Personen', count: (d) => d.case.personen.length },
-    { id: 'tatkomplexe', label: 'Tatkomplexe', count: (d) => d.case.tatkomplexe.length },
-    { id: 'beziehungen', label: 'Beziehungen', count: (d) => d.tables.beziehungen.rows.length },
-    { id: 'fristen', label: 'Fristen & Termine', count: (d) => d.case.fristen.length },
+    { id: 'akte', label: 'Aktenübersicht', icon: Files, count: (d) => d.case.dokumente.length },
+    { id: 'personen', label: 'Personen', icon: Users, count: (d) => d.case.personen.length },
+    { id: 'tatkomplexe', label: 'Tatkomplexe', icon: Tags, count: (d) => d.case.tatkomplexe.length },
+    { id: 'beziehungen', label: 'Beziehungen', icon: Network, count: (d) => d.tables.beziehungen.rows.length },
+    { id: 'fristen', label: 'Fristen & Termine', icon: CalendarClock, count: (d) => d.case.fristen.length },
   ] },
   { group: 'Zeitleisten', items: [
-    { id: 'geschehen', label: 'Geschehen', count: (d) => d.case.ereignisse.filter((e) => e.kind === 'geschehen').length },
-    { id: 'verfahren', label: 'Verfahren', count: (d) => d.case.ereignisse.filter((e) => e.kind === 'verfahren').length },
+    { id: 'geschehen', label: 'Geschehen', icon: History, count: (d) => d.case.ereignisse.filter((e) => e.kind === 'geschehen').length },
+    { id: 'verfahren', label: 'Verfahren', icon: Milestone, count: (d) => d.case.ereignisse.filter((e) => e.kind === 'verfahren').length },
   ] },
   { group: 'Analyse', items: [
-    { id: 'board', label: 'Beweisboard' },
-    { id: 'widersprueche', label: 'Widersprüche', count: (d) => d.case.widersprueche.length },
+    { id: 'board', label: 'Beweisboard', icon: Pin },
+    { id: 'widersprueche', label: 'Widersprüche', icon: Split, count: (d) => d.case.widersprueche.length },
   ] },
 ]
+
+const AKTEN_ANSICHTEN = new Set<string>(['einzelverfahren', ...NAV.flatMap((g) => g.items.map((i) => i.id))])
+
+/** Die Adresse hält offene Akte und Ansicht fest, damit Neuladen und Zurück-Taste funktionieren. */
+type Route = { art: 'start' } | { art: 'mv'; id: string } | { art: 'akte'; id: string; view: View }
+function liesRoute(): Route {
+  const [art, id, ansicht] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent)
+  if (art === 'mv' && id) return { art, id }
+  if (art === 'akte' && id) return { art, id, view: (AKTEN_ANSICHTEN.has(ansicht) ? ansicht : 'akte') as View }
+  return { art: 'start' }
+}
+
+function themaLesen() {
+  try {
+    const t = localStorage.getItem('thema')
+    if (t === 'dark' || t === 'light') return t === 'dark'
+  } catch { /* nur Komfort */ }
+  return matchMedia('(prefers-color-scheme: dark)').matches
+}
 
 type Notice = { text: string; warn?: boolean; mvId?: string; retry?: boolean }
 
@@ -66,16 +87,18 @@ export default function App() {
   const [pool, setPool] = useState<Pool | null>(null)
   const poolRef = useRef<Pool | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
-  const [mvId, setMvId] = useState<string | null>(null)
+  const [start] = useState(liesRoute)
+  const [mvId, setMvId] = useState<string | null>(start.art === 'mv' ? start.id : null)
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
-  const [view, setView] = useState<View>('start')
+  const [view, setView] = useState<View>(start.art === 'mv' ? 'mv' : 'start')
+  const [laedt, setLaedt] = useState(start.art === 'akte')
   const [fragenOffen, setFragenOffen] = useState(false)
   const [fragenVollbild, setFragenVollbild] = useState(false)
   const [bereich, setBereich] = useState<'akte' | 'alle'>('akte')
   const fragen = useFragen()
   const [doc, setDoc] = useState<{ id: string; anchor?: string; anchors?: string[] } | null>(null)
-  const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
+  const [dark, setDark] = useState(themaLesen)
   const [job, setJob] = useState<JobState | null>(null)
   const [now, setNow] = useState(Date.now())
   const [suche, setSuche] = useState('')
@@ -109,7 +132,11 @@ export default function App() {
     return () => clearInterval(t)
   }, [job?.busy])
 
-  useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light' }, [dark])
+  useEffect(() => {
+    const thema = dark ? 'dark' : 'light'
+    document.documentElement.dataset.theme = thema
+    try { localStorage.setItem('thema', thema) } catch { /* nur Komfort */ }
+  }, [dark])
   const refresh = useCallback(() => Promise.all([
     api.cases().catch(() => []),
     api.pool().then(setPool).catch(() => setPool({ einzel: [], massenverfahren: [] })),
@@ -118,11 +145,41 @@ export default function App() {
   useEffect(() => { poolRef.current = pool }, [pool])
 
   const load = useCallback(async (id: string, v: View = 'akte', preserveView = false) => {
-    const next = await api.get(id)
-    setData(next); setCaseId(id)
-    if (!preserveView) { setView(v); setDoc(null) }
-    refresh()
+    if (!preserveView) setLaedt(true)
+    try {
+      const next = await api.get(id)
+      setData(next); setCaseId(id)
+      if (!preserveView) { setView(v); setDoc(null) }
+      refresh()
+    } finally { if (!preserveView) setLaedt(false) }
   }, [refresh])
+  const oeffne = useCallback((id: string, v?: View) => {
+    load(id, v).catch((error) => setNotice({ text: `Akte konnte nicht geöffnet werden: ${error}`, warn: true }))
+  }, [load])
+
+  // Adresse und Zustand abgleichen: beim Start, bei Zurück/Vor und nach jedem Wechsel der Ansicht
+  const routeAnwenden = useCallback((r: Route, offeneAkte: string | null) => {
+    if (r.art === 'akte') {
+      if (r.id !== offeneAkte) oeffne(r.id, r.view)
+      else { setView(r.view); setDoc(null) }
+    } else if (r.art === 'mv') { setMvId(r.id); setView('mv'); setDoc(null) }
+    else { setView('start'); setDoc(null) }
+  }, [oeffne])
+  useEffect(() => { if (start.art === 'akte') routeAnwenden(start, null) }, [start, routeAnwenden])
+  useEffect(() => {
+    if (laedt) return
+    const ziel = view === 'mv' && mvId ? `#/mv/${encodeURIComponent(mvId)}` : view !== 'start' && caseId ? `#/akte/${encodeURIComponent(caseId)}/${view}` : '#/'
+    if ((location.hash || '#/') === ziel) return
+    location.hash = ziel
+  }, [laedt, view, mvId, caseId])
+  useEffect(() => {
+    const geaendert = () => {
+      const r = liesRoute()
+      if (r.art === 'akte' ? r.id !== caseId || r.view !== view : r.art === 'mv' ? r.id !== mvId || view !== 'mv' : view !== 'start') routeAnwenden(r, caseId)
+    }
+    addEventListener('hashchange', geaendert)
+    return () => removeEventListener('hashchange', geaendert)
+  }, [caseId, view, mvId, routeAnwenden])
 
   const openIn = async (id: string, docId: string, anchors: string[]) => {
     try {
@@ -156,7 +213,7 @@ export default function App() {
     es.onerror = () => { es.close(); setJob((j) => j && { ...j, busy: false, error: j.error || 'Verbindung zum Agenten unterbrochen.' }); refresh() }
   }, [load, refresh])
 
-  const ctx = useMemo(() => ({ open: ((id, anchor, opts) => { if (id) setDoc({ id, anchor, ...opts }) }) as OpenDoc, caseId: caseId ?? '' }), [caseId])
+  const ctx = useMemo(() => ({ open: ((id, anchor, opts) => { if (id) setDoc({ id, anchor, ...opts }) }) as OpenDoc, caseId: caseId ?? '', dokumente: data?.case.dokumente ?? [] }), [caseId, data])
   const t = data?.tables
   const mv = pool?.massenverfahren.find((m) => m.id === mvId)
   const woerter = suche.toLocaleLowerCase('de').split(/\s+/).filter(Boolean)
@@ -168,6 +225,26 @@ export default function App() {
   const einzel = (pool?.einzel ?? []).filter((c) => trifft(c.name, c.id))
   const gruppen = (pool?.massenverfahren ?? []).filter((m) => trifft(m.sache, ...m.mitglieder.map((a) => a.name)))
   const openMv = (id: string) => { setMvId(id); setView('mv'); setDoc(null) }
+  const aktenwahl = <>
+    <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
+    <Fold key={data ? 'mit-akte' : 'ohne-akte'} id={data ? 'side:aktenpool:akte' : 'side:aktenpool'} defaultOpen={!data} forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
+      {einzel.map((c) => (
+        <button key={c.id} className="nav" onContextMenu={(e) => oeffneMenu(e, aktenZiel(c.id, c.name))} title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'true' : undefined} onClick={() => oeffne(c.id)}>
+          <span className="nav-label">{c.name}</span>
+        </button>
+      ))}
+    </Fold>
+    {gruppen.length > 0 && (
+      <Fold key={data ? 'mv-mit-akte' : 'mv-ohne-akte'} id={data ? 'side:massenverfahren:akte' : 'side:massenverfahren'} defaultOpen={!data} forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
+        {gruppen.map((m) => (
+          <button key={m.id} className="nav" onContextMenu={(e) => oeffneMenu(e, mvZiel(m))} title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
+            <span className="nav-label">{m.sache}</span><span className="n">{m.mitglieder.length}</span>
+          </button>
+        ))}
+      </Fold>
+    )}
+    {filtert && !einzel.length && !gruppen.length && <p className="side-empty">Keine Treffer</p>}
+  </>
   const poolPruefen = async () => {
     try {
       const { job } = await api.refreshPool()
@@ -182,44 +259,29 @@ export default function App() {
       {loeschDialog && <LoeschDialog ziel={loeschDialog.ziel} ausloeser={loeschDialog.ausloeser}
         onClose={() => setLoeschDialog(null)} onLoeschen={loeschen} />}
       <div className={`app ${doc && data ? 'with-doc' : ''}`}>
-        <nav className="side" aria-label="Navigation">
+        <nav className={`side ${data ? 'mit-akte' : ''}`} aria-label="Navigation">
           <div className="brand">Aktenaufbereiter</div>
           <div className="casename">{data?.case.name ?? 'Keine Akte geöffnet'}</div>
-          <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}>Übersicht</button>
-          <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
-          <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
-              {einzel.map((c) => (
-                <button key={c.id} className="nav" onContextMenu={(e) => oeffneMenu(e, aktenZiel(c.id, c.name))} title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
-                  <span className="nav-label">{c.name}</span>
-                </button>
-              ))}
-          </Fold>
-          {gruppen.length > 0 && (
-            <Fold id="side:massenverfahren" forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
-              {gruppen.map((m) => (
-                <button key={m.id} className="nav" onContextMenu={(e) => oeffneMenu(e, mvZiel(m))} title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
-                  <span className="nav-label">{m.sache}</span><span className="n">{m.mitglieder.length}</span>
-                </button>
-              ))}
-            </Fold>
-          )}
-          {filtert && !einzel.length && !gruppen.length && <p className="side-empty">Keine Treffer</p>}
+          <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}><Archive size={16} aria-hidden />Übersicht</button>
+          {!data && aktenwahl}
           {data && NAV.map((g) => (
             <div key={g.group} style={{ display: 'contents' }}>
               <div className="nav-group">{g.group}</div>
               {g.group === 'Verzeichnisse' && data.case.massenverfahren && (
                 <button className="nav" aria-current={view === 'einzelverfahren' ? 'page' : undefined} onClick={() => setView('einzelverfahren')}>
-                  Einzelverfahren<span className="n">{data.case.massenverfahren.verfahren.length}</span>
+                  <ListTree size={16} aria-hidden />Einzelverfahren<span className="n">{data.case.massenverfahren.verfahren.length}</span>
                 </button>
               )}
               {g.items.map((i) => (
                 <button key={i.id} className="nav" aria-current={view === i.id ? 'page' : undefined} onClick={() => setView(i.id)}>
-                  {i.label}{i.count && <span className="n">{i.count(data)}</span>}
+                  <i.icon size={16} aria-hidden />{i.label}{i.count && <span className="n">{i.count(data)}</span>}
                 </button>
               ))}
             </div>
           ))}
+          {data && aktenwahl}
           <div className="spacer" />
+          <div className="side-fuss">
           {job?.busy && (
             <button className="agent-status" onClick={() => setView('start')} title={job.log.at(-1) ?? 'startet'}>
               <i className="spinner" aria-hidden />
@@ -229,7 +291,8 @@ export default function App() {
               </span>
             </button>
           )}
-          <button className="nav" onClick={() => setDark(!dark)}>{dark ? 'Heller Modus' : 'Dunkler Modus'}</button>
+          <button className="nav" onClick={() => setDark(!dark)}>{dark ? <Sun size={16} aria-hidden /> : <Moon size={16} aria-hidden />}{dark ? 'Heller Modus' : 'Dunkler Modus'}</button>
+          </div>
         </nav>
 
         <main className="main">
@@ -245,15 +308,16 @@ export default function App() {
               </div>
             )}
           </div>
-          {view === 'mv' && mv ? (
-            <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
+          {laedt ? <Ladeflaeche /> : view === 'mv' && mv ? (
+            <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => oeffne(id)} job={job} onStart={startJob} />
           ) : view === 'start' || view === 'mv' || !data || !t ? (
-            <Start onMenu={oeffneMenu} pool={pool} onMassenverfahren={openMv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
+            <Start onMenu={oeffneMenu} pool={pool} onMassenverfahren={openMv} onOpen={(id) => oeffne(id)} job={job} onStart={startJob} />
           ) : view === 'geschehen' ? <GeschehenTimeline data={data.case} />
             : view === 'verfahren' ? (<><VerfahrenTimeline data={data.case} /><DataTable table={t.verfahren} /></>)
             : view === 'widersprueche' ? <Contradictions data={data.case} />
             : view === 'board' ? <div className="page" style={{ paddingBottom: 16 }}><header><h1>Beweisboard</h1><span className="sub">Karten verschieben, anklicken, Doppelklick öffnet das Beweismittel</span></header><Board key={caseId} data={data.case} board={data.board} suspects={data.suspects ?? {}} onSuspects={(suspects) => setData((d) => d?.case.id === data.case.id ? { ...d, suspects } : d)} /></div>
-            : <DataTable key={view} table={t[view]} sub={view === 'akte' && data.case.warnungen.length ? `${data.case.warnungen.length} Validierungshinweise` : undefined} />}
+            : t[view] ? <DataTable key={view} table={t[view]} sub={view === 'akte' && data.case.warnungen.length ? `${data.case.warnungen.length} Validierungshinweise` : undefined} kopf={view === 'akte' ? <AktenKopf data={data.case} onAnsicht={setView} /> : undefined} />
+            : <div className="page empty">Diese Ansicht gibt es für diese Akte nicht.</div>}
         </main>
 
         {doc && data && <DocViewer data={data.case} docId={doc.id} anchor={doc.anchor} anchors={doc.anchors} onClose={() => setDoc(null)} />}

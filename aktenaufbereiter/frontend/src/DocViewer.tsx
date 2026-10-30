@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { api, type Case, type Marks } from './api'
 import { useDocs } from './ctx'
 
@@ -48,7 +49,7 @@ export function DocViewer({ data, docId, anchor, anchors, onClose }: { data: Cas
       <header>
         <div className="top">
           <h2>{doc.id} · {doc.title || doc.doc_type}</h2>
-          <button className="btn ghost" onClick={onClose} aria-label="Schließen">✕</button>
+          <button className="btn ghost" onClick={onClose} aria-label="Schließen"><X size={16} aria-hidden /></button>
         </div>
         <div className="meta">
           <span>{blatt}</span>
@@ -96,6 +97,7 @@ export function DocViewer({ data, docId, anchor, anchors, onClose }: { data: Cas
               style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }} />)}
           </button>
         )}
+        {rep && rep.format !== 'image' && marking && !current && <div className="skelett skelett-dokument" />}
         {rep && rep.format !== 'image' && !(marking && !current) && <iframe title={`PDF ${doc.id}`} key={src} src={src} />}
       </div>
     </aside>
