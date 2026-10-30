@@ -9,6 +9,7 @@ import { DocViewer } from './DocViewer'
 import { FragenFenster, useFragen } from './Fragen'
 import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
+import { LoeschMenu, LoeschDialog, aktenZiel, mvZiel, type LoeschZiel, type MenuStand } from './LoeschMenu'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
 type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
@@ -78,6 +79,29 @@ export default function App() {
   const [job, setJob] = useState<JobState | null>(null)
   const [now, setNow] = useState(Date.now())
   const [suche, setSuche] = useState('')
+  const [menu, setMenu] = useState<MenuStand | null>(null)
+  const [loeschDialog, setLoeschDialog] = useState<MenuStand | null>(null)
+  const schliesseMenu = useCallback(() => setMenu(null), [])
+  const oeffneMenu = (e: React.MouseEvent, ziel: LoeschZiel) => {
+    e.preventDefault(); e.stopPropagation()
+    const ausloeser = e.currentTarget as HTMLElement
+    const rect = ausloeser.getBoundingClientRect()
+    setMenu({ ziel, ausloeser, x: e.clientX || e.clientY ? e.clientX : rect.left, y: e.clientX || e.clientY ? e.clientY : rect.bottom })
+  }
+  const loeschen = async () => {
+    if (!loeschDialog) return
+    if (job?.busy) throw new Error('Agent arbeitet')
+    const { ziel } = loeschDialog
+    const gruppe = pool?.massenverfahren.find((m) => m.id === ziel.id)
+    const ids = ziel.art === 'akte' ? [ziel.id] : [...(gruppe?.mitglieder.map((a) => a.case_id) ?? []), gruppe?.sammelakte_id]
+    if (ziel.art === 'akte') await api.deleteCase(ziel.id)
+    else await api.deleteMv(ziel.id)
+    setLoeschDialog(null)
+    setNotice({ text: `„${ziel.name}“ wurde gelöscht.` })
+    if (caseId && ids.includes(caseId)) { setData(null); setCaseId(null); setDoc(null); setView('start') }
+    if (ziel.art === 'mv' && mvId === ziel.id) { setMvId(null); setView('start'); setDoc(null) }
+    refresh()
+  }
 
   useEffect(() => {
     if (!job?.busy) return
@@ -153,6 +177,10 @@ export default function App() {
 
   return (
     <DocCtx.Provider value={ctx}>
+      {menu && <LoeschMenu stand={menu} deaktiviert={!!job?.busy} onClose={schliesseMenu}
+        onWaehlen={() => { setMenu(null); setLoeschDialog(menu) }} />}
+      {loeschDialog && <LoeschDialog ziel={loeschDialog.ziel} ausloeser={loeschDialog.ausloeser}
+        onClose={() => setLoeschDialog(null)} onLoeschen={loeschen} />}
       <div className={`app ${doc && data ? 'with-doc' : ''}`}>
         <nav className="side" aria-label="Navigation">
           <div className="brand">Aktenaufbereiter</div>
@@ -161,7 +189,7 @@ export default function App() {
           <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
           <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
               {einzel.map((c) => (
-                <button key={c.id} className="nav" title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
+                <button key={c.id} className="nav" onContextMenu={(e) => oeffneMenu(e, aktenZiel(c.id, c.name))} title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
                   <span className="nav-label">{c.name}</span>
                 </button>
               ))}
@@ -169,7 +197,7 @@ export default function App() {
           {gruppen.length > 0 && (
             <Fold id="side:massenverfahren" forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
               {gruppen.map((m) => (
-                <button key={m.id} className="nav" title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
+                <button key={m.id} className="nav" onContextMenu={(e) => oeffneMenu(e, mvZiel(m))} title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
                   <span className="nav-label">{m.sache}</span><span className="n">{m.mitglieder.length}</span>
                 </button>
               ))}
@@ -220,7 +248,7 @@ export default function App() {
           {view === 'mv' && mv ? (
             <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
           ) : view === 'start' || view === 'mv' || !data || !t ? (
-            <Start pool={pool} onMassenverfahren={openMv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
+            <Start onMenu={oeffneMenu} pool={pool} onMassenverfahren={openMv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
           ) : view === 'geschehen' ? <GeschehenTimeline data={data.case} />
             : view === 'verfahren' ? (<><VerfahrenTimeline data={data.case} /><DataTable table={t.verfahren} /></>)
             : view === 'widersprueche' ? <Contradictions data={data.case} />

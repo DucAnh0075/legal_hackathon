@@ -57,7 +57,16 @@ const j = async <T,>(r: Response): Promise<T> => {
   if (!r.ok) throw new Error((await r.text()) || r.statusText)
   return r.json()
 }
+const geloescht = async (r: Response): Promise<{ ok: boolean }> => {
+  if (!r.ok) {
+    const fehler = await r.json().catch(() => null)
+    throw new Error(typeof fehler?.detail === 'string' ? fehler.detail : r.statusText)
+  }
+  return r.json()
+}
 export const api = {
+  deleteCase: (id: string) => fetch(`/api/cases/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(geloescht),
+  deleteMv: (id: string) => fetch(`/api/pool/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(geloescht),
   frage: (frage: string, caseId: string | null, verlauf: { frage: string; antwort: string }[]) =>
     fetch('/api/fragen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frage, case_id: caseId, verlauf }) }).then((r) => j<{ job: string }>(r)),
   pool: () => fetch('/api/pool').then((r) => j<Pool>(r)),

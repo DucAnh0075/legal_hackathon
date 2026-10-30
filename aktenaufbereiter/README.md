@@ -21,6 +21,3 @@ Wird eine bestehende Fall-Kennung erneut verwendet, bleiben vorhandene Zeilen un
 
 ## Massenverfahren
 Nach jeder Verarbeitung gleicht `pool.py` alle Akten ab. Akten mit derselben Gegenseite und demselben Lebenssachverhalt (z. B. derselbe Flug, dasselbe zurückgerufene Produkt) erscheinen unter „Aktenpool → Massenverfahren in Sache X“, sortiert nach Eingang der Klage. Per Klick entsteht daraus eine Sammelakte mit allen Funktionen einer normalen Akte. Jedes Einzelverfahren bekommt einen eigenen Buchstaben als Dokumentpräfix. Die Einzelakten bleiben unverändert, die Sammelakte wird nur ergänzt.
-
-## Hinweis
-`cases/demo` ist ein von Hand gebauter UI-Testfall (ohne KI) und kann gelöscht werden.

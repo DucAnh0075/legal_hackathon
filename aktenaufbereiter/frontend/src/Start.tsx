@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Pool } from './api'
 import { api } from './api'
 import { Fold, Page } from './components'
+import { aktenZiel, mvZiel, type LoeschZiel } from './LoeschMenu'
 
 export type JobState = { caseId: string; log: string[]; busy: boolean; error: string; started: number }
 
@@ -17,9 +18,9 @@ function kennungAus(name: string, vergeben: Map<string, string>) {
   return `${basis}-${n}`
 }
 
-function AkteZeile({ name, stats, onOpen, onErgaenzen }: { name: string; stats?: string[]; onOpen: () => void; onErgaenzen: () => void }) {
+function AkteZeile({ name, stats, onOpen, onErgaenzen, onContextMenu }: { onContextMenu: React.MouseEventHandler<HTMLDivElement>; name: string; stats?: string[]; onOpen: () => void; onErgaenzen: () => void }) {
   return (
-    <div className="caseitem">
+    <div className="caseitem" tabIndex={-1} onContextMenu={onContextMenu}>
       <button className="caserow" onClick={onOpen}>
         <b>{name}</b>
         {stats && <span className="stats">{stats.map((s) => <span key={s}>{s}</span>)}</span>}
@@ -29,7 +30,8 @@ function AkteZeile({ name, stats, onOpen, onErgaenzen }: { name: string; stats?:
   )
 }
 
-export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
+export function Start({ pool, onMassenverfahren, onOpen, job, onStart, onMenu }: {
+  onMenu: (e: React.MouseEvent, ziel: LoeschZiel) => void;
   pool: Pool | null; onMassenverfahren: (id: string) => void; onOpen: (id: string) => void; job: JobState | null; onStart: (jobId: string, caseId: string, open?: boolean) => void
 }) {
   const [name, setName] = useState('')
@@ -52,6 +54,9 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
     })
     return m
   }, [cases, pool])
+  useEffect(() => {
+    if (pool && ziel && !bekannt.has(ziel.id)) setZiel(null)
+  }, [pool, ziel, bekannt])
   const caseId = kennung ?? kennungAus(name, bekannt)
   const vorhanden = kennung !== null ? bekannt.get(kennung.trim()) : undefined
 
@@ -103,7 +108,7 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
         {cases.length > 0 && (
           <Fold id="aktenpool" className="section" title={<h2>Aktenpool<span className="count">{cases.length}</span></h2>}>
             {cases.map((c) => (
-              <AkteZeile key={c.id} name={c.name} onOpen={() => onOpen(c.id)} onErgaenzen={() => setZiel({ id: c.id, name: c.name })}
+              <AkteZeile onContextMenu={(e) => onMenu(e, aktenZiel(c.id, c.name))} key={c.id} name={c.name} onOpen={() => onOpen(c.id)} onErgaenzen={() => setZiel({ id: c.id, name: c.name })}
                 stats={[`${c.dokumente} Aktenstücke`, `${c.personen} Personen`, `${c.widersprueche} Widersprüche`]} />
             ))}
           </Fold>
@@ -112,7 +117,7 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
           action={<button className="btn" disabled={busy} onClick={refreshPool}>Pool neu prüfen</button>}>
           {pool.massenverfahren.length === 0 && <p className="sub">Keine Massenverfahren erkannt.</p>}
           {pool.massenverfahren.map((m) => (
-            <Fold key={m.id} id={`mv:${m.id}`} defaultOpen={false} className="mv-fold" title={<>
+            <Fold onContextMenu={(e) => onMenu(e, mvZiel(m))} key={m.id} id={`mv:${m.id}`} defaultOpen={false} className="mv-fold" title={<>
               <b>{m.sache}</b>
               <span className="stats">
                 <span>{m.mitglieder.length} Akten</span>
@@ -121,7 +126,7 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart }: {
               </span>
             </>}>
               {m.mitglieder.map((a) => (
-                <div key={a.case_id} className="member">
+                <div key={a.case_id} className="member" tabIndex={-1} onContextMenu={(e) => onMenu(e, aktenZiel(a.case_id, a.name))}>
                   <button className="text-link" onClick={() => onOpen(a.case_id)}>{a.name}</button>
                   {m.neue_mitglieder.includes(a.case_id) && <small className="sub">neu, noch nicht in der Sammelakte</small>}
                   <button className="btn ghost" aria-label={`${a.name} ergänzen`} onClick={() => setZiel({ id: a.case_id, name: a.name })}>Ergänzen</button>

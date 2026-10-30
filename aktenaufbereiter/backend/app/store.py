@@ -15,6 +15,10 @@ def case_dir(case_id: str) -> Path:
     return config.CASES_DIR / case_id
 
 
+def delete_case(case_id: str) -> None:
+    shutil.rmtree(case_dir(case_id))
+
+
 def save_case(case: Case) -> None:
     d = case_dir(case.id)
     d.mkdir(parents=True, exist_ok=True)

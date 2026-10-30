@@ -53,6 +53,15 @@ def get_pool():
     return pool.pool_view()
 
 
+@app.delete("/api/pool/{mv_id}")
+def delete_pool(mv_id: str):
+    try:
+        pool.gruppe_loeschen(mv_id)
+    except KeyError:
+        raise HTTPException(404, "Massenverfahren nicht gefunden")
+    return {"ok": True}
+
+
 @app.post("/api/pool/refresh")
 async def refresh_pool():
     return {"job": await _start(pool.refresh)}
@@ -116,6 +125,17 @@ def get_case(case_id: str):
     c = _case(case_id)
     return {"case": c, "tables": build(c, store.get_annotations(case_id)), "layout": store.get_layout(case_id),
             "suspects": store.get_suspects(case_id), "board": board.load(c)}
+
+
+@app.delete("/api/cases/{case_id}")
+def delete_case(case_id: str):
+    try:
+        pool.akte_loeschen(case_id)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(404, "Akte nicht gefunden")
+    except pool.SammelakteVorhanden as e:
+        raise HTTPException(409, str(e))
+    return {"ok": True}
 
 
 @app.get("/api/cases/{case_id}/files/{doc_id}")

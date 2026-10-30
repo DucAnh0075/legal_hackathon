@@ -6,10 +6,14 @@ import hashlib
 import json
 import re
 
-from . import config, llm, store
+from . import config, llm, store, suche
 from .prompts import SYSTEM_POOL, pool_prompt, profil_prompt
 from .schemas import Case, FallProfil, Fundstelle, PoolGruppen
 from .validate import blatt_label
+
+
+class SammelakteVorhanden(Exception):
+    pass
 
 
 def _lesen(path) -> dict:
@@ -138,6 +142,46 @@ def load() -> list[dict]:
 
 def sammel_id(mv_id: str) -> str:
     return "sammel-" + mv_id.removeprefix("mv-")
+
+
+def _aufraeumen() -> None:
+    (config.CASES_DIR / "antworten_pool.json").unlink(missing_ok=True)
+    suche.sync()
+
+
+def akte_loeschen(case_id: str) -> None:
+    store.case_dir(case_id)
+    gruppen = load()
+    betroffen = [g for g in gruppen if case_id in g["mitglieder"]]
+    for g in betroffen:
+        if (store.case_dir(sammel_id(g["id"])) / "case.json").exists():
+            raise SammelakteVorhanden("Die Sammelakte enthält diese Akte. Zuerst das Massenverfahren löschen.")
+    store.delete_case(case_id)
+    if betroffen:
+        for g in betroffen:
+            g["mitglieder"] = [cid for cid in g["mitglieder"] if cid != case_id]
+        path = config.CASES_DIR / "massenverfahren.json"
+        data = _lesen(path)
+        data["gruppen"] = [g for g in gruppen if g not in betroffen or len(g["mitglieder"]) >= 2]
+        _schreiben(path, data)
+    _aufraeumen()
+
+
+def gruppe_loeschen(mv_id: str) -> None:
+    gruppen = load()
+    gruppe = next((g for g in gruppen if g["id"] == mv_id), None)
+    if gruppe is None:
+        raise KeyError(mv_id)
+    for cid in [*gruppe["mitglieder"], sammel_id(mv_id)]:
+        try:
+            store.delete_case(cid)
+        except FileNotFoundError:
+            pass
+    path = config.CASES_DIR / "massenverfahren.json"
+    data = _lesen(path)
+    data["gruppen"] = [g for g in gruppen if g["id"] != mv_id]
+    _schreiben(path, data)
+    _aufraeumen()
 
 
 def pool_view() -> dict:
