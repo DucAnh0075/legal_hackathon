@@ -44,5 +44,16 @@ Backend nach Änderungen an `.env` oder Python-Code neu starten (kein Reload).
 - **Pool:** Profile sind an den `case.json`-Hash gebunden; zum Neuprofilieren `cases/<id>/profil.json` löschen. Die Gruppen-ID bleibt über `massenverfahren.json` stabil, deshalb diese Datei nicht löschen, wenn schon eine Sammelakte existiert. Testakten: `aktenaufbereiter/testdaten/massenverfahren/`.
 - **Secrets:** `.env` nie committen oder ausgeben; Key nur in `backend/.env`.
 
+## Orchestrator-Modus
+Gilt erst, wenn der Nutzer "Orchestrator-Modus an" schreibt, und bis "Orchestrator-Modus aus". Sonst normal arbeiten.
+
+- **Rollen:** Claude plant, delegiert und prüft, schreibt aber selbst keinen Produktcode. Builder ist GPT 6 mit Reasoning `low` über die Codex-CLI; seine Regeln stehen in [AGENTS.md](AGENTS.md).
+- **Aufruf:** `codex exec -m gpt-6-astra -c model_reasoning_effort=low --sandbox workspace-write "<Auftrag>"`
+- **Auftrag:** Jeder Auftrag steht für sich: Ziel, betroffene Dateien, Grenzen, Akzeptanzkriterien, Prüfbefehl. Der Builder kennt diese Sitzung nicht.
+- **Zuschnitt:** Kleine, einzeln prüfbare Aufträge, nacheinander; parallel nur bei getrennten Dateien.
+- **Prüfung:** Nach jedem Auftrag `git diff` selbst lesen und Prüfbefehl selbst ausführen (z. B. `npx tsc -b`, App starten). Die Erfolgsmeldung des Builders zählt nicht als Nachweis.
+- **Nacharbeit:** Mängel als neuen Auftrag zurückgeben. Nach zwei Fehlversuchen an derselben Stelle stoppen und dem Nutzer berichten.
+- **Selbst erledigen:** Git, Planung, Review, `CLAUDE.md` und `AGENTS.md`. Commits nur auf Anweisung des Nutzers.
+
 ## Design
 Frontend-Arbeit mit den Skills `impeccable` (Operate-Modus) und `emil-design-eng`; Detektor: `.claude/skills/impeccable/scripts/impeccable detect --json aktenaufbereiter/frontend/src`. Beweisboard = Kork-Pinnwand mit Karten und roten Fäden; sonst ruhiges Kanzlei-Dossier, hell/dunkel.
