@@ -13,7 +13,7 @@ Aus gemischten Aktenstücken (Text, PDF, Screenshots) entstehen sortierte Übers
 Sachlich, präzise, ruhig. Ein Kanzlei-Dossier, kein Dashboard-Spielzeug. Das Beweisboard darf als einzige Fläche eine Detektiv-Pinnwand sein (Kork, Karteikarten, rote Fäden).
 
 ## Anti-references
-Generische SaaS-Kacheln, Neon-Verläufe, Legal-Tech-Klischees mit Waage und Paragraphenzeichen, Chat-Blasen und Antworten ohne Fundstelle.
+Generische SaaS-Kacheln, Neon-Verläufe, Legal-Tech-Klischees mit Waage und Paragraphenzeichen, Antworten ohne Fundstelle.
 
 ## Principles
 - Fragen an die Akte: erst Treffer, dann Antwort, dann Belegprüfung. Jede Aussage trägt ein geprüftes Zitat; was die Akte nicht hergibt, wird so benannt.

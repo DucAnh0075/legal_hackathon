@@ -1,5 +1,6 @@
 /* Kanzlei-Dossier: warmes Papier, Tintenblau, roter Faden nur fürs Beweisboard und Widersprüche. */
 :root {
+  --viewer-w: max(380px, 38vw);
   --bg: oklch(96.5% 0.008 85);
   --surface: oklch(99% 0.004 85);
   --sunken: oklch(93.5% 0.01 85);
@@ -62,7 +63,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 a { color: var(--accent); }
 
 .app { display: grid; grid-template-columns: 232px 1fr; height: 100%; }
-.app.with-doc { grid-template-columns: 232px 1fr minmax(380px, 38vw); }
+.app.with-doc { grid-template-columns: 232px 1fr var(--viewer-w); }
 .side { background: var(--sunken); border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
 .brand { font: 600 19px var(--serif); padding: 0 10px 2px; }
 .casename { color: var(--muted); padding: 0 10px 14px; font-size: 12.5px; }
@@ -358,27 +359,56 @@ table.t { border-collapse: separate; border-spacing: 0; width: 100%; }
 }
 
 /* Fragen an die Akte */
-.frage-inhalt { max-width: 860px; min-width: 0; overflow-wrap: anywhere; }
-.frage-form { display: grid; gap: 8px; margin: 16px 0 24px; }
-.frage-form label, .frage-meta, .frage-urteil { font-size: 12.5px; color: var(--muted); }
-.frage-form textarea { width: 100%; min-width: 0; resize: vertical; }
+.frage-icon { position: fixed; right: 20px; bottom: 20px; z-index: 40; width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--accent); color: var(--surface); box-shadow: var(--shadow); transition: transform 160ms var(--ease); }
+.frage-icon.mit-dokument { right: calc(var(--viewer-w) + 20px); }
+.frage-icon:active { transform: scale(0.97); }
+.frage-icon-punkt { position: absolute; top: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.frage-fenster { position: fixed; right: 16px; bottom: 16px; z-index: 40; width: min(440px, calc(100vw - 32px)); height: min(680px, calc(100vh - 32px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; transform-origin: bottom right; transition: opacity 180ms var(--ease), transform 180ms var(--ease);
+  @starting-style { opacity: 0; transform: scale(0.96); }
+}
+.frage-icon[hidden], .frage-fenster[hidden] { display: none; }
+.frage-fenster.mit-dokument { right: calc(var(--viewer-w) + 16px); }
+.frage-fenster.vollbild { inset: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; transform-origin: center; }
+.frage-fenster.vollbild.mit-dokument { right: var(--viewer-w); border-right: 1px solid var(--line); }
+.frage-kopf { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 8px; padding: 16px; border-bottom: 1px solid var(--line); flex: none; }
+.frage-titel { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.frage-titel h2 { font-size: 18px; }
+.frage-kopf-knopfe { display: flex; gap: 4px; }
+.frage-kopf-knopfe .btn { display: grid; place-items: center; padding: 6px; min-width: 32px; min-height: 32px; }
+.frage-kopf > .frage-actions { width: 100%; }
+.frage-verlauf { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; padding: 0 16px; position: relative; }
+.frage-inhalt { min-width: 0; overflow-wrap: anywhere; }
+.frage-eingabe { display: flex; align-items: flex-end; gap: 8px; flex: none; padding: 16px; border-top: 1px solid var(--line); }
+.frage-fenster.vollbild :is(.frage-kopf, .frage-verlauf, .frage-eingabe) { padding-inline: max(16px, calc((100% - 860px) / 2)); }
+.frage-eingabe textarea { flex: 1; width: 100%; min-width: 0; resize: vertical; max-height: 180px; }
+.frage-eingabe textarea::placeholder { color: var(--muted); }
+.frage-leer { padding: 12px 0 24px; }
+.frage-blase { margin: 0 0 16px auto; width: fit-content; max-width: 85%; padding: 8px 12px; background: var(--accent-soft); color: var(--ink); border-radius: 6px; white-space: pre-wrap; }
+.frage-meta, .frage-urteil { font-size: 12.5px; color: var(--muted); }
 .frage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .frage-actions .btn { white-space: normal; text-align: left; }
 .frage-actions .btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .frage-eintrag { border-top: 1px solid var(--line); padding: 20px 0; }
-.frage-eintrag h2 { font-size: 20px; white-space: pre-wrap; margin-bottom: 14px; }
+.frage-eintrag:first-child { border-top: 0; }
 .frage-eintrag h3 { font: 600 13px var(--sans); margin-bottom: 6px; }
 .frage-datei { display: grid; gap: 2px; width: 100%; text-align: left; padding: 8px 0; border: 0; border-bottom: 1px solid var(--line); background: none; overflow-wrap: anywhere; }
-.frage-datei:hover { color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .frage-datei:hover { color: var(--accent); }
+  .frage-icon:hover { opacity: 0.9; }
+}
 .frage-datei:disabled { cursor: default; color: var(--muted); }
 .frage-aussage { margin: 16px 0; }
 .frage-aussage > p, .frage-beleg p { white-space: pre-wrap; margin: 0 0 8px; }
-.frage-beleg { border-left: 2px solid var(--line); margin: 8px 0; padding: 2px 0 2px 12px; }
+.frage-beleg { border-left: 1px solid var(--line); margin: 8px 0; padding: 2px 0 2px 12px; }
+.frage-beleg p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.frage-fenster.vollbild .frage-beleg p { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .frage-beleg .chip { white-space: normal; text-align: left; overflow-wrap: anywhere; }
 .frage-warn { color: var(--thread); font-weight: 600; }
 .frage-hinweise { margin: 18px 0; }
 .frage-meta p { margin: 6px 0; }
 .frage-eintrag > .frage-actions { margin-top: 12px; }
 @media (max-width: 900px) {
-  .side .frage-pool-nav { display: block; }
+  .frage-fenster, .frage-fenster.mit-dokument, .frage-fenster.vollbild.mit-dokument { inset: 0; width: auto; height: auto; border: 0; border-radius: 0; }
+  .frage-vollbild { display: none !important; }
+  .frage-icon.mit-dokument { right: 20px; }
 }

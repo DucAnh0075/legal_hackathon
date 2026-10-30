@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type AktenAntwort, type Datei, type FragenEvent, type Hinweis, type Kontext, type Treffer } from './api'
-import { Page } from './components'
 
 export type Eintrag = {
   id: string; frage: string; treffer: Treffer[]; kontext: Kontext | null; antwort: AktenAntwort | null
@@ -100,45 +99,109 @@ const urteilText = { traegt: 'Beleg trägt die Aussage', traegt_teilweise: 'Bele
 const bezugText = { stuetzt: 'stützt', widerspricht: 'widerspricht', erwaehnt: 'erwähnt' }
 const blattText = (blatt: string) => /^\d/.test(blatt) ? `Bl. ${blatt}` : blatt
 
-export function Fragen({ scope, caseName, canScopeCase, onScope, fragen, onOpen }: {
-  scope: string | null; caseName?: string; canScopeCase: boolean; onScope: (caseScope: boolean) => void
+export function FragenFenster({ scope, caseName, hatAkte, onBereich, fragen, onOpen, dokumentOffen, offen, onOffen, vollbild, onVollbild }: {
+  scope: string | null; caseName?: string; hatAkte: boolean; onBereich: (bereich: 'akte' | 'alle') => void
   fragen: ReturnType<typeof useFragen>; onOpen: (caseId: string, docId: string, anchors: string[]) => void
+  dokumentOffen: boolean; offen: boolean; onOffen: (offen: boolean) => void
+  vollbild: boolean; onVollbild: (vollbild: boolean) => void
 }) {
   const [entwuerfe, setEntwuerfe] = useState<Record<string, string>>({})
+  const [gesehen, setGesehen] = useState(0)
+  const icon = useRef<HTMLButtonElement>(null)
+  const fenster = useRef<HTMLElement>(null)
+  const eingabe = useRef<HTMLTextAreaElement>(null)
+  const verlauf = useRef<HTMLDivElement>(null)
+  const folgen = useRef(true) // zeigt die neueste Frage, bis der Nutzer selbst scrollt
+  const scrollTop = useRef(0)
+  const warOffen = useRef(false)
   const key = scopeKey(scope)
   const text = entwuerfe[key] ?? ''
-  const items = fragen.verlauf[key] ?? []
-  const busy = items.some((e) => e.busy)
+  const items = fragen.verlauf[key]
+  const busy = items?.some((e) => e.busy) ?? false
+  const alle = Object.values(fragen.verlauf).flat()
+  const laeuft = alle.some((e) => e.busy)
+  const fertig = alle.filter((e) => !e.busy).length
+  const titel = scope === null ? 'Fragen an alle Akten' : 'Fragen an die Akte'
+  useEffect(() => { if (offen) setGesehen(fertig) }, [offen, fertig])
+  useEffect(() => {
+    if (offen) eingabe.current?.focus()
+    else if (warOffen.current) icon.current?.focus()
+    warOffen.current = offen
+  }, [offen])
+  useEffect(() => {
+    if (!offen) return
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing || (!vollbild && !fenster.current?.contains(document.activeElement))) return
+      event.preventDefault()
+      if (vollbild) onVollbild(false)
+      else onOffen(false)
+    }
+    document.addEventListener('keydown', escape)
+    return () => document.removeEventListener('keydown', escape)
+  }, [offen, vollbild, onOffen, onVollbild])
+  useEffect(() => { folgen.current = true }, [key])
+  useEffect(() => {
+    const el = verlauf.current
+    if (!offen || !el) return
+    const neueste = el.querySelector<HTMLElement>('.frage-eintrag:last-child')
+    el.scrollTop = folgen.current ? (neueste?.offsetTop ?? 0) : scrollTop.current
+  }, [items, offen, key, vollbild])
+  const stellen = (frage: string) => {
+    if (busy || !frage.trim()) return
+    folgen.current = true
+    void fragen.stellen(frage, scope)
+  }
   const submit = () => {
     if (busy || !text.trim()) return
-    void fragen.stellen(text, scope)
+    stellen(text)
     setEntwuerfe((d) => ({ ...d, [key]: '' }))
   }
-  return <Page title={scope === null ? 'Fragen an alle Akten' : 'Fragen an die Akte'} sub={scope === null ? undefined : caseName}>
-    <div className="frage-inhalt">
-      {canScopeCase && <div className="frage-actions" aria-label="Fragebereich">
-        <button className="btn" aria-pressed={scope !== null} onClick={() => onScope(true)}>Diese Akte</button>
-        <button className="btn" aria-pressed={scope === null} onClick={() => onScope(false)}>Alle Akten</button>
-      </div>}
-      <form className="frage-form" onSubmit={(e) => { e.preventDefault(); submit() }}>
-        <label htmlFor="aktenfrage">Frage an die Akten</label>
-        <textarea id="aktenfrage" rows={3} value={text} disabled={busy} aria-describedby="frage-hilfe" onChange={(e) => setEntwuerfe((d) => ({ ...d, [key]: e.target.value }))}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} />
-        <div><button className="btn primary" disabled={busy || !text.trim()}>Fragen</button></div>
-        <p id="frage-hilfe" className="frage-meta">Antworten stammen nur aus den Akten und tragen Fundstellen. Keine rechtliche Bewertung.</p>
-      </form>
-      {[...items].reverse().map((e) => {
+  const vorschlaege = scope !== null
+    ? ['Worum geht es in dieser Akte?', 'Welche Fristen und Termine sind dokumentiert?', 'Wo weichen Angaben voneinander ab?']
+    : ['Welche Akten betreffen dieselbe Gegenseite?', 'Welche Fristen sind dokumentiert?', 'In welchen Akten wird ein Rückruf erwähnt?']
+  return <>
+    <button ref={icon} className={`frage-icon${dokumentOffen ? ' mit-dokument' : ''}`} hidden={offen}
+      aria-label="Fragen an die Akten" title="Fragen an die Akten" aria-expanded={offen} onClick={() => onOffen(true)}>
+      {laeuft ? <i className="spinner" aria-hidden="true" /> : <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6 4V6a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></svg>}
+      {fertig > gesehen && <span className="frage-icon-punkt" aria-hidden="true" />}
+    </button>
+    <section ref={fenster} className={`frage-fenster${vollbild ? ' vollbild' : ''}${dokumentOffen ? ' mit-dokument' : ''}`}
+      hidden={!offen} role="dialog" aria-modal="false" aria-label={titel}>
+      <header className="frage-kopf">
+        <div className="frage-titel"><h2>{titel}</h2>{scope !== null && <small className="sub">{caseName}</small>}</div>
+        <div className="frage-kopf-knopfe">
+          <button className="btn ghost frage-vollbild" aria-pressed={vollbild} aria-label={vollbild ? 'Vollbild beenden' : 'Vollbild'} onClick={() => onVollbild(!vollbild)}>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d={vollbild ? 'M3 9h6V3m6 0v6h6M3 15h6v6m6 0v-6h6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6'} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+          <button className="btn ghost" aria-label="Schließen" onClick={() => onOffen(false)}>
+            <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </button>
+        </div>
+        {hatAkte && <div className="frage-actions" aria-label="Fragebereich">
+          <button className="btn" aria-pressed={scope !== null} onClick={() => onBereich('akte')}>Diese Akte</button>
+          <button className="btn" aria-pressed={scope === null} onClick={() => onBereich('alle')}>Alle Akten</button>
+        </div>}
+      </header>
+      <div className="frage-verlauf" ref={verlauf} aria-live="polite" tabIndex={0}
+        onWheel={() => { folgen.current = false }} onTouchMove={() => { folgen.current = false }}
+        onKeyDown={(e) => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) folgen.current = false }}
+        onScroll={(e) => { if (e.currentTarget.clientHeight) scrollTop.current = e.currentTarget.scrollTop }}>
+        <div className="frage-inhalt">
+          {!items?.length && <div className="frage-leer"><p>Antworten stammen nur aus den Akten und tragen Fundstellen. Keine rechtliche Bewertung.</p>
+            <div className="frage-actions">{vorschlaege.map((frage) => <button className="btn" key={frage} onClick={() => stellen(frage)}>{frage}</button>)}</div>
+          </div>}
+      {items?.map((e) => {
         const dateien = passendeDateien(e)
         const dauer = Math.max(0, ...Object.values(e.ms))
         return <section className="frage-eintrag" key={e.id} aria-labelledby={`frage-${e.id}`}>
-          <h2 id={`frage-${e.id}`}>{e.frage}</h2>
-          {dateien.length > 0 && <div className="frage-dateien">
-            <h3>{e.antwort ? 'Passende Dateien' : 'Mögliche Treffer'}</h3>
+          <p className="frage-blase" id={`frage-${e.id}`}>{e.frage}</p>
+          {e.busy && <p className="frage-meta" role="status">Antwort wird aus der Akte erstellt …</p>}
+          {!e.antwort && dateien.length > 0 && <div className="frage-dateien">
+            <h3>Mögliche Treffer</h3>
             {dateien.map((d) => <button className="frage-datei" key={JSON.stringify([d.case_id, d.doc_id])} onClick={() => onOpen(d.case_id, d.doc_id, d.anchors)}>
               <span>{d.title || d.doc_id}</span><span className="frage-meta">{[d.blatt && blattText(d.blatt), scope === null && d.case_name, `${d.anchors.length} ${d.anchors.length === 1 ? 'Stelle' : 'Stellen'}`].filter(Boolean).join(' · ')}</span>
             </button>)}
           </div>}
-          {e.busy && <p className="frage-meta" role="status">Antwort wird aus der Akte erstellt …</p>}
           {e.antwort && statusText[e.antwort.status] && <p>{statusText[e.antwort.status]}</p>}
           {e.antwort?.aussagen.map((a, i) => <div className="frage-aussage" key={i}>
             <p>{a.text}</p>
@@ -153,6 +216,12 @@ export function Fragen({ scope, caseName, canScopeCase, onScope, fragen, onOpen 
               {a.grund && <span> · {a.grund}</span>}
             </div>
           </div>)}
+          {e.antwort && dateien.length > 0 && <div className="frage-dateien">
+            <h3>Passende Dateien</h3>
+            {dateien.map((d) => <button className="frage-datei" key={JSON.stringify([d.case_id, d.doc_id])} onClick={() => onOpen(d.case_id, d.doc_id, d.anchors)}>
+              <span>{d.title || d.doc_id}</span><span className="frage-meta">{[d.blatt && blattText(d.blatt), scope === null && d.case_name, `${d.anchors.length} ${d.anchors.length === 1 ? 'Stelle' : 'Stellen'}`].filter(Boolean).join(' · ')}</span>
+            </button>)}
+          </div>}
           {e.pruefung === 'fehler' && <p className="err">Die Belegprüfung konnte nicht abgeschlossen werden.</p>}
           {e.hinweise.length > 0 && <div className="frage-hinweise"><h3>Dazu in der Akte dokumentiert</h3>
             {e.hinweise.map((h) => <button className="frage-datei" key={`${h.case_id}:${h.art}:${h.id}`} disabled={!h.anchors.length}
@@ -165,10 +234,18 @@ export function Fragen({ scope, caseName, canScopeCase, onScope, fragen, onOpen 
             {!!e.antwort?.verworfen && <p>{e.antwort.verworfen} Angaben ohne prüfbaren Beleg wurden verworfen.</p>}
             {!e.busy && Object.keys(e.ms).length > 0 && <p>Dauer: {(dauer / 1000).toLocaleString('de', { maximumFractionDigits: 1 })} s{e.aus_cache ? ' · aus dem Zwischenspeicher' : ''}</p>}
           </div>
-          {!!e.antwort?.nachfragen.length && <div className="frage-actions">{e.antwort.nachfragen.map((f, i) => <button className="btn" key={i} disabled={busy} onClick={() => void fragen.stellen(f, scope)}>{f}</button>)}</div>}
           {e.error && <p className="err" role="alert">{e.error}</p>}
+          {!!e.antwort?.nachfragen.length && <div className="frage-actions">{e.antwort.nachfragen.map((f, i) => <button className="btn" key={i} disabled={busy} onClick={() => stellen(f)}>{f}</button>)}</div>}
         </section>
       })}
-    </div>
-  </Page>
+        </div>
+      </div>
+      <form className="frage-eingabe" onSubmit={(e) => { e.preventDefault(); submit() }}>
+        <textarea ref={eingabe} aria-label="Frage an die Akten" placeholder="Frage an die Akte stellen" rows={2} value={text}
+          onChange={(e) => setEntwuerfe((d) => ({ ...d, [key]: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} />
+        <button className="btn primary" disabled={busy || !text.trim()}>Fragen</button>
+      </form>
+    </section>
+  </>
 }

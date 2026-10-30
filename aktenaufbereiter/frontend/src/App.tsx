@@ -6,12 +6,12 @@ import { Fold } from './components'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
-import { Fragen, useFragen } from './Fragen'
+import { FragenFenster, useFragen } from './Fragen'
 import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
-type View = 'fragen' | 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
+type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
 
 const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
@@ -69,7 +69,9 @@ export default function App() {
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
   const [view, setView] = useState<View>('start')
-  const [fragenScope, setFragenScope] = useState<string | null>(null)
+  const [fragenOffen, setFragenOffen] = useState(false)
+  const [fragenVollbild, setFragenVollbild] = useState(false)
+  const [bereich, setBereich] = useState<'akte' | 'alle'>('akte')
   const fragen = useFragen()
   const [doc, setDoc] = useState<{ id: string; anchor?: string; anchors?: string[] } | null>(null)
   const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
@@ -100,11 +102,12 @@ export default function App() {
 
   const openIn = async (id: string, docId: string, anchors: string[]) => {
     try {
-      if (id !== caseId) await load(id, 'fragen', true)
+      if (!caseId) setBereich('alle') // Pool-Frage: Antwort bleibt sichtbar, wenn der Beleg eine Akte lädt
+      if (id !== caseId) await load(id, undefined, true)
       setDoc({ id: docId, anchors })
+      if (matchMedia('(max-width: 900px)').matches || (!fragenVollbild && matchMedia('(max-width: 1100px)').matches)) setFragenOffen(false)
     } catch (error) { setNotice({ text: `Akte konnte nicht geöffnet werden: ${error}`, warn: true }) }
   }
-  const openFragen = (scope: string | null) => { setFragenScope(scope); setView('fragen'); setDoc(null) }
 
   // Agentenlauf: Fortschritt per SSE, unabhängig von der gerade offenen Ansicht
   const startJob = useCallback((jobId: string, id: string, open = true) => {
@@ -156,10 +159,9 @@ export default function App() {
           <div className="casename">{data?.case.name ?? 'Keine Akte geöffnet'}</div>
           <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}>Übersicht</button>
           <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
-          <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold frage-pool-nav" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
-              <button className="nav" aria-current={view === 'fragen' && fragenScope === null ? 'page' : undefined} onClick={() => openFragen(null)}>Fragen an alle Akten</button>
+          <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
               {einzel.map((c) => (
-                <button key={c.id} className="nav" title={c.name} aria-current={view !== 'start' && view !== 'mv' && view !== 'fragen' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
+                <button key={c.id} className="nav" title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
                   <span className="nav-label">{c.name}</span>
                 </button>
               ))}
@@ -182,7 +184,6 @@ export default function App() {
                   Einzelverfahren<span className="n">{data.case.massenverfahren.verfahren.length}</span>
                 </button>
               )}
-              {g.group === 'Analyse' && <button className="nav" aria-current={view === 'fragen' && fragenScope === caseId ? 'page' : undefined} onClick={() => openFragen(caseId)}>Fragen an diese Akte</button>}
               {g.items.map((i) => (
                 <button key={i.id} className="nav" aria-current={view === i.id ? 'page' : undefined} onClick={() => setView(i.id)}>
                   {i.label}{i.count && <span className="n">{i.count(data)}</span>}
@@ -216,10 +217,7 @@ export default function App() {
               </div>
             )}
           </div>
-          {view === 'fragen' ? (
-            <Fragen scope={fragenScope} caseName={fragenScope === caseId ? data?.case.name : fragenScope ?? undefined} canScopeCase={!!data}
-              onScope={(caseScope) => openFragen(caseScope ? caseId : null)} fragen={fragen} onOpen={openIn} />
-          ) : view === 'mv' && mv ? (
+          {view === 'mv' && mv ? (
             <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
           ) : view === 'start' || view === 'mv' || !data || !t ? (
             <Start pool={pool} onMassenverfahren={openMv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
@@ -231,6 +229,9 @@ export default function App() {
         </main>
 
         {doc && data && <DocViewer data={data.case} docId={doc.id} anchor={doc.anchor} anchors={doc.anchors} onClose={() => setDoc(null)} />}
+        <FragenFenster scope={bereich === 'akte' && caseId ? caseId : null} caseName={data?.case.name} hatAkte={!!caseId}
+          onBereich={setBereich} fragen={fragen} onOpen={openIn} dokumentOffen={!!doc && !!data}
+          offen={fragenOffen} onOffen={setFragenOffen} vollbild={fragenVollbild} onVollbild={setFragenVollbild} />
       </div>
     </DocCtx.Provider>
   )
