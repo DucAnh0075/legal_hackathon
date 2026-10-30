@@ -33,6 +33,15 @@ function Werte({ a }: { a: ExternAbruf }) {
   )
 }
 
+function AbrufLink({ a }: { a: ExternAbruf }) {
+  return (
+    <p className="extern-link">
+      <a className="text-link" href={a.url!} target="_blank" rel="noreferrer">{a.url}</a>
+      {a.abgerufen_am && <small className="sub">abgerufen {zeitpunkt(a.abgerufen_am)}</small>}
+    </p>
+  )
+}
+
 function Eintrag({ a }: { a: ExternAbruf }) {
   return (
     <article className="extern">
@@ -44,12 +53,7 @@ function Eintrag({ a }: { a: ExternAbruf }) {
         {a.status === 'ok' ? <Werte a={a} /> : <p className={a.status === 'fehler' ? 'hint' : 'sub'}>{a.grund ?? 'Kein Ergebnis'}</p>}
         {a.quelle && <h4>{a.quelle}</h4>}
         {a.hinweis && <p className="sub">{a.hinweis}</p>}
-        {a.url && (
-          <details className="extern-anfrage">
-            <summary>Gesendete Anfrage{a.abgerufen_am ? `, abgerufen ${zeitpunkt(a.abgerufen_am)}` : ''}</summary>
-            <code>{a.url}</code>
-          </details>
-        )}
+        {a.url && <AbrufLink a={a} />}
       </div>
     </article>
   )
@@ -78,6 +82,7 @@ function Zeitzonen({ abrufe }: { abrufe: ExternAbruf[] }) {
       )}
       {rest.map((a, i) => <p key={i} className={a.status === 'fehler' ? 'hint' : 'sub'}>{parameter(a)}: {a.grund ?? 'Kein Ergebnis'}</p>)}
       {quellen.length > 0 && <p className="sub">{quellen.join(', ')}</p>}
+      {ok.filter((a) => a.url).map((a, i) => <AbrufLink key={i} a={a} />)}
     </>
   )
 }

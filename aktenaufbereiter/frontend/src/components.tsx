@@ -78,26 +78,39 @@ function FundMarke({ docId, anker, blatt, unklar, onClick }: { docId: string; an
 }
 
 /** Datum mit Hinweis in Klammern: Der Hinweis bleibt sichtbar, macht die Spalte aber nicht breit. */
-const DATUM_HINWEIS = /^(\d{2}\.\d{2}\.\d{4}(?: \d{2}:\d{2})?) \((.+)\)$/
+export const DATUM_HINWEIS = /^(\d{2}\.\d{2}\.\d{4}(?: \d{2}:\d{2})?) \((.+)\)$/
 
 /** Zellen mit "Bl. 3 (A01:L04); Bl. 5 (A06)" werden zu klickbaren Chips. */
 const PART = /^(.*?)\s*\(([A-Z]\d{2}(?::L\d+)?)\)(\s*\[Fundstelle unklar\])?$/
 export function CellContent({ value }: { value: string | number }) {
-  const { open } = useDocs()
   if (typeof value !== 'string') return <>{value}</>
   const datum = DATUM_HINWEIS.exec(value)
   if (datum) return <>{datum[1]}<small className="datum-hinweis">{datum[2]}</small></>
   const parts = value.split('; ')
   const matches = parts.map((p) => PART.exec(p))
   if (!parts.length || !matches.every(Boolean)) return <>{value}</>
+  return <FundMarken matches={matches as RegExpExecArray[]} />
+}
+
+const MARKEN_KURZ = 6
+
+function FundMarken({ matches }: { matches: RegExpExecArray[] }) {
+  const { open } = useDocs()
+  const [alle, setAlle] = useState(false)
+  const sichtbar = alle ? matches : matches.slice(0, MARKEN_KURZ)
   return (
     <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
-      {matches.map((m, i) => {
+      {sichtbar.map((m, i) => {
         const [, blatt, ref, unklar] = m!
         const anker = ref.includes(':') ? ref : undefined
         return <FundMarke key={i} docId={ref.split(':')[0]} anker={anker} blatt={blatt} unklar={!!unklar}
           onClick={(e) => { e.stopPropagation(); open(ref.split(':')[0], anker) }} />
       })}
+      {matches.length > MARKEN_KURZ && (
+        <button type="button" className="btn marken-mehr" onClick={(e) => { e.stopPropagation(); setAlle(!alle) }}>
+          {alle ? 'weniger' : `+${matches.length - MARKEN_KURZ} weitere`}
+        </button>
+      )}
     </span>
   )
 }

@@ -44,7 +44,7 @@ export function Start({ pool, onMassenverfahren, onOpen, job, onStart, onMenu }:
   const [startError, setStartError] = useState('')
   const [pending, setPending] = useState(false)
   const busy = pending || !!job?.busy
-  const cases = pool?.einzel ?? []
+  const cases = pool?.akten ?? []
 
   const bekannt = useMemo(() => {
     const m = new Map<string, string>()

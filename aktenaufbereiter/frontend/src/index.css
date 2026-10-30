@@ -453,6 +453,7 @@ input[type='date'], input[type='time'] { font: inherit; color: var(--ink); backg
 .extern h4, .extern-verworfen h4 { margin: 0 0 6px; font: 600 12.5px var(--sans); color: var(--muted); }
 .extern-quelle { padding: 12px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
 .extern-quelle p { margin: 0; }
+.extern-link { margin: 0; display: grid; gap: 2px; font-size: 12.5px; overflow-wrap: anywhere; }
 .extern-quelle h4 { margin: 0; }
 .extern-quelle dl { margin: 0; display: grid; gap: 3px; }
 .extern-quelle dl > div { display: grid; grid-template-columns: minmax(150px, 2fr) minmax(0, 3fr); gap: 12px; }
@@ -460,9 +461,6 @@ input[type='date'], input[type='time'] { font: inherit; color: var(--ink); backg
 .extern-quelle dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .extern-quelle dl.metar > div { grid-template-columns: 76px minmax(0, 1fr); }
 .extern-quelle dl.metar dd { font: 12.5px/1.5 var(--mono); }
-.extern-anfrage summary { width: fit-content; cursor: pointer; color: var(--muted); font-size: 12.5px; border-radius: 4px; transition: color 150ms var(--ease); }
-.extern-anfrage summary:hover { color: var(--ink); }
-.extern-anfrage code { display: block; margin-top: 6px; font: 12px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
 .extern-art .tablewrap td { white-space: nowrap; }
 .extern-verworfen { padding: 14px 0 0; }
 .extern-verworfen ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
@@ -609,3 +607,10 @@ input[type='date'], input[type='time'] { font: inherit; color: var(--ink); backg
 .boardwrap .react-flow__controls-button { background: var(--surface); color: var(--ink); border-bottom-color: var(--line); }
 .boardwrap .react-flow__controls-button svg { fill: currentColor; }
 @media (hover: hover) and (pointer: fine) { .boardwrap .react-flow__controls-button:hover { background: var(--sunken); } }
+
+/* Personenverzeichnis: Name mit Aliasen, lange Rollen und viele Fundstellen bleiben lesbar */
+.t td.name-zelle { min-width: 200px; max-width: 320px; }
+.t td.name-zelle b { font-weight: 600; display: block; }
+.t td .alias { display: block; margin-top: 2px; color: var(--muted); font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.t td.rolle-zelle { min-width: 220px; max-width: 360px; }
+.marken-mehr { padding: 1px 8px; font-size: 12px; }

@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { api, type Table } from './api'
-import { CellContent, Page } from './components'
+import { CellContent, DATUM_HINWEIS, Page } from './components'
 import { useDocs } from './ctx'
 
 const sortKey = (v: string | number) => {
   if (typeof v === 'number') return v
   const m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(v)
   return m ? `${m[3]}${m[2]}${m[1]}${v.slice(10)}` : v.toLowerCase()
+}
+
+function NameZelle({ value }: { value: string }) {
+  const k = value.indexOf(' (auch: ')
+  const alias = value.slice(k + 8).replace(/\)$/, '')
+  return <><b>{value.slice(0, k)}</b><small className="alias">auch: {alias}</small></>
 }
 
 export function DataTable({ table, extra, sub, kopf }: { table: Table; extra?: React.ReactNode; sub?: string; kopf?: React.ReactNode }) {
@@ -32,7 +38,10 @@ export function DataTable({ table, extra, sub, kopf }: { table: Table; extra?: R
     navigator.clipboard.writeText(tsv)
   }
   // Kurze Spalten bleiben einzeilig, damit der Text Platz bekommt
-  const eng = useMemo(() => table.cols.map((_, i) => table.rows.every((r) => String(r.cells[i] ?? '').replace(/ \(.*\)$/, '').length <= 24)), [table])
+  const eng = useMemo(() => table.cols.map((_, i) => table.rows.every((r) => {
+    const wert = String(r.cells[i] ?? '').trim()
+    return (DATUM_HINWEIS.exec(wert)?.[1] ?? wert).length <= 24
+  })), [table])
   const annField = (c: string) => (c === 'Anmerkung Kanzlei' ? 'kanzlei' : c === 'Anmerkung Mandant' ? 'mandant' : null)
 
   return (
@@ -73,8 +82,8 @@ export function DataTable({ table, extra, sub, kopf }: { table: Table; extra?: R
                           onBlur={(e) => { if (e.target.value !== String(c)) api.annotate(caseId, r.id.replace(/-\d+$/, ''), f, e.target.value) }} />
                       </td>
                     ) : (
-                      <td key={i} className={eng[i] ? 'eng' : undefined}>
-                        {typeof c === 'string' && c.length > 220 ? <div className="zelle-lang"><CellContent value={c} /></div> : <CellContent value={c} />}
+                      <td key={i} className={eng[i] ? 'eng' : table.cols[i] === 'Name' ? 'name-zelle' : table.cols[i] === 'Prozessrolle' ? 'rolle-zelle' : undefined}>
+                        {table.cols[i] === 'Name' && typeof c === 'string' && c.includes(' (auch: ') ? <NameZelle value={c} /> : typeof c === 'string' && c.length > 220 ? <div className="zelle-lang"><CellContent value={c} /></div> : <CellContent value={c} />}
                       </td>
                     )
                   })}

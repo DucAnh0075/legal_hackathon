@@ -23,7 +23,7 @@ export type OffeneFrage = { id: string; frage: string; fundstellen: Fundstelle[]
 export type Merkmal = { art: string; wert: string; fundstellen: Fundstelle[] }
 export type Mitglied = { case_id: string; name: string; klageeingang?: DateValue | null; klageeingang_fundstelle?: Fundstelle | null; aktivseite: string[]; gegenseite: string[]; merkmale: Merkmal[] }
 export type Massenverfahren = { id: string; sache: string; gemeinsamkeiten: string[]; mitglieder: Mitglied[]; sammelakte_id: string | null; neue_mitglieder: string[] }
-export type Pool = { einzel: CaseInfo[]; massenverfahren: Massenverfahren[] }
+export type Pool = { akten: CaseInfo[]; einzel: CaseInfo[]; massenverfahren: Massenverfahren[] }
 export type Einzelverfahren = Mitglied & { buchstabe: string }
 export type MassenverfahrenInfo = { mv_id: string; sache: string; gemeinsamkeiten: string[]; verfahren: Einzelverfahren[] }
 export type Case = {
@@ -78,7 +78,9 @@ export const api = {
   deleteMv: (id: string) => fetch(`/api/pool/${encodeURIComponent(id)}`, { method: 'DELETE' }).then(geloescht),
   frage: (frage: string, caseId: string | null, verlauf: { frage: string; antwort: string }[]) =>
     fetch('/api/fragen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frage, case_id: caseId, verlauf }) }).then((r) => j<{ job: string }>(r)),
-  pool: () => fetch('/api/pool').then((r) => j<Pool>(r)),
+  // Der Aktenpool zeigt jede geladene Akte, auch Mitglieder von Massenverfahren; Sammelakten sind abgeleitet und fehlen
+  pool: () => Promise.all([fetch('/api/pool').then((r) => j<Omit<Pool, 'akten'>>(r)), api.cases()])
+    .then(([p, alle]): Pool => ({ ...p, akten: alle.filter((c) => !c.sammelakte) })),
   refreshPool: () => fetch('/api/pool/refresh', { method: 'POST' }).then((r) => j<{ job: string }>(r)),
   createSammelakte: (mvId: string) => fetch(`/api/pool/${encodeURIComponent(mvId)}/sammelakte`, { method: 'POST' }).then((r) => j<{ job: string; case_id: string }>(r)),
   cases: () => fetch('/api/cases').then((r) => j<CaseInfo[]>(r)),

@@ -141,7 +141,7 @@ export default function App() {
   }, [dark])
   const refresh = useCallback(() => Promise.all([
     api.cases().catch(() => []),
-    api.pool().then(setPool).catch(() => setPool({ einzel: [], massenverfahren: [] })),
+    api.pool().then(setPool).catch(() => setPool({ akten: [], einzel: [], massenverfahren: [] })),
   ]), [])
   useEffect(() => { refresh() }, [refresh])
   useEffect(() => { poolRef.current = pool }, [pool])
@@ -224,28 +224,28 @@ export default function App() {
     const text = felder.join(' ').toLocaleLowerCase('de')
     return woerter.every((w) => text.includes(w))
   }
-  const einzel = (pool?.einzel ?? []).filter((c) => trifft(c.name, c.id))
+  const akten = (pool?.akten ?? []).filter((c) => trifft(c.name, c.id))
   const gruppen = (pool?.massenverfahren ?? []).filter((m) => trifft(m.sache, ...m.mitglieder.map((a) => a.name)))
   const openMv = (id: string) => { setMvId(id); setView('mv'); setDoc(null) }
   const aktenwahl = <>
     <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
-    <Fold key={data ? 'mit-akte' : 'ohne-akte'} id={data ? 'side:aktenpool:akte' : 'side:aktenpool'} defaultOpen={!data} forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
-      {einzel.map((c) => (
+    <Fold key={data ? 'mit-akte' : 'ohne-akte'} id={data ? 'side:aktenpool:akte' : 'side:aktenpool'} defaultOpen={!data} forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{akten.length}</span></>}>
+      {!filtert && !akten.length && <p className="side-empty">Noch keine Akten</p>}
+      {akten.map((c) => (
         <button key={c.id} className="nav" onContextMenu={(e) => oeffneMenu(e, aktenZiel(c.id, c.name))} title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'true' : undefined} onClick={() => oeffne(c.id)}>
           <span className="nav-label">{c.name}</span>
         </button>
       ))}
     </Fold>
-    {gruppen.length > 0 && (
-      <Fold key={data ? 'mv-mit-akte' : 'mv-ohne-akte'} id={data ? 'side:massenverfahren:akte' : 'side:massenverfahren'} defaultOpen={!data} forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
-        {gruppen.map((m) => (
-          <button key={m.id} className="nav" onContextMenu={(e) => oeffneMenu(e, mvZiel(m))} title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
-            <span className="nav-label">{m.sache}</span><span className="n">{m.mitglieder.length}</span>
-          </button>
-        ))}
-      </Fold>
-    )}
-    {filtert && !einzel.length && !gruppen.length && <p className="side-empty">Keine Treffer</p>}
+    <Fold key={data ? 'mv-mit-akte' : 'mv-ohne-akte'} id={data ? 'side:massenverfahren:akte' : 'side:massenverfahren'} defaultOpen={!data} forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
+      {!filtert && !gruppen.length && <p className="side-empty">Keine erkannt</p>}
+      {gruppen.map((m) => (
+        <button key={m.id} className="nav" onContextMenu={(e) => oeffneMenu(e, mvZiel(m))} title={`Massenverfahren in Sache ${m.sache}`} aria-current={view === 'mv' && mvId === m.id ? 'page' : undefined} onClick={() => openMv(m.id)}>
+          <span className="nav-label">{m.sache}</span><span className="n">{m.mitglieder.length}</span>
+        </button>
+      ))}
+    </Fold>
+    {filtert && !akten.length && !gruppen.length && <p className="side-empty">Keine Treffer</p>}
   </>
   const poolPruefen = async () => {
     try {
@@ -265,7 +265,7 @@ export default function App() {
           <div className="brand">Aktenaufbereiter</div>
           <div className="casename">{data?.case.name ?? 'Keine Akte geöffnet'}</div>
           <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}><Archive size={16} aria-hidden />Übersicht</button>
-          {!data && aktenwahl}
+          {aktenwahl}
           {data && NAV.map((g) => (
             <div key={g.group} style={{ display: 'contents' }}>
               <div className="nav-group">{g.group}</div>
@@ -281,7 +281,6 @@ export default function App() {
               ))}
             </div>
           ))}
-          {data && aktenwahl}
           <div className="spacer" />
           <div className="side-fuss">
           {job?.busy && (
