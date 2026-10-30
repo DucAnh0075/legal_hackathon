@@ -349,6 +349,58 @@ class AntwortPruefung(BaseModel):
     pruefungen: list[Aussagenpruefung] = []
 
 
+# ---- Externe Daten (nicht Akteninhalt; getrennt in extern.json) ---------------
+
+class ExternAufruf(BaseModel):
+    tool: str
+    parameter: dict[str, str | None] = {}
+    anker: list[str] = []  # Zeilenanker der Aktenstelle, die den Abruf begründet
+
+
+class ExternPlan(BaseModel):
+    aufrufe: list[ExternAufruf] = []
+
+
+class ExternIdee(BaseModel):
+    id: str = ""
+    art: str
+    anlass: str
+    anker: list[str] = []
+    abfragen: list[dict[str, str | None]] = []
+
+
+class ExternIdeen(BaseModel):
+    ideen: list[ExternIdee] = []
+
+
+class ExternWert(BaseModel):
+    label: str
+    wert: str
+    link: str | None = None
+
+
+class ExternAbruf(BaseModel):
+    tool: str
+    parameter: dict[str, str] = {}
+    status: Literal["ok", "leer", "fehler", "verworfen"]
+    grund: str | None = None
+    fundstellen: list[Fundstelle] = []
+    herkunft: Literal["akte", "eingabe"] = "eingabe"
+    werte: list[ExternWert] = []
+    quelle: str | None = None
+    url: str | None = None  # gesendete Anfrage
+    abgerufen_am: str | None = None
+    hinweis: str | None = None
+
+
+class ExternBericht(BaseModel):
+    id: str
+    anfrage: str = ""
+    erstellt_am: str
+    abrufe: list[ExternAbruf] = []
+    hinweis: str | None = None
+
+
 class Case(Consolidation):
     id: str
     name: str

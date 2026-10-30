@@ -9,6 +9,7 @@ KI-Agent + Web-App für den Strafrichter (Legal Hackathon, Challenge 5): liest A
 - Normen (z. B. § 263 StGB) nur übernehmen, wenn sie in der Akte stehen.
 - Ereignisdatum, Dokumentdatum, Eingangsdatum immer getrennt halten.
 - Ergänzungsmodus ist append-only: bestehende Zeilen, IDs und Anmerkungen (Kanzlei/Mandant) nie ändern.
+- Einzige Ausnahme von "Nur Akteninhalt": der Reiter "Externe Daten", ein neutraler Datenbericht zu Echtweltdaten. Er bleibt von der Akte getrennt (`extern.json`, nicht in `case.json`, Fragen, Widersprüchen, Board, Export) und ist als "Nicht Akteninhalt" gekennzeichnet. Der Agent liefert nur Ideen, keine Vorauswahl; Daten werden erst auf Auswahl oder Eingabe des Richters abgerufen. Die Akte liefert nur Abfrageparameter (Ort, Datum, Uhrzeit, mit Fundstelle), die Werte stammen aus externen Quellen oder lokaler Berechnung, nie vom Modell. Nach außen gehen nur Gemeinde, Datum, Flughafen, Domain, Währung.
 
 ## Struktur
 - `aktenaufbereiter/backend/` FastAPI + Agent (Python 3.12, venv in `.venv`)
@@ -18,6 +19,7 @@ KI-Agent + Web-App für den Strafrichter (Legal Hackathon, Challenge 5): liest A
   - `app/pool.py` Massenverfahren im Aktenpool: Fallprofil je Akte (`profil.json`) → Gruppierung (`cases/massenverfahren.json`, ID `mv-<früheste Akte>`)
   - `app/sammelakte.py` Sammelakte `sammel-<…>` aus einer Gruppe: Dokumente je Einzelverfahren als A01…, B01…, Extraktionen übernommen, dann `agent.finish`
   - `app/suche.py` lokaler Zeilenindex (SQLite FTS5, `cases/suche.sqlite`); `app/frage.py` Fragen an Akte oder Pool: Treffer → Antwort → deterministische Belegprüfung (`pruefen`) → inhaltliche Prüfung
+  - `app/extern.py` Externe Daten: `ideen` (Modell schlägt Datenarten vor, je Akte gecacht) und `lauf` (Bericht aus Auswahl oder Freitext, Modell plant nur Abrufe). `pruefen` kontrolliert Parameter vor jedem Abruf; Tools: wetter, zeitzone, licht, flugwetter, kalender, kurs, domain, webarchiv. Limits 12 Abrufe, 30 Zeitzonen. Cache `cases/extern_cache.json`
   - `app/llm.py` OpenRouter-Client (JSON-Schema, Vision, Retry, `json_repair`)
   - `app/prompts.py`, `app/schemas.py` (Pydantic = Datenmodell), `app/tables.py` (Vorlagenspalten), `app/export_xlsx.py`, `app/main.py` (API + SSE)
 - `aktenaufbereiter/frontend/` Vite + React + TS (`@xyflow/react` fürs Beweisboard); Dev-Proxy `/api` → `:8000`
@@ -45,6 +47,7 @@ Backend nach Änderungen an `.env` oder Python-Code neu starten (kein Reload).
 - **Konsolidierung:** große JSON-Antworten scheitern; deshalb in Teilen (entities → events/statements/rest parallel).
 - **Pool:** Profile sind an den `case.json`-Hash gebunden; zum Neuprofilieren `cases/<id>/profil.json` löschen. Die Gruppen-ID bleibt über `massenverfahren.json` stabil, deshalb diese Datei nicht löschen, wenn schon eine Sammelakte existiert. Testakten: `aktenaufbereiter/testdaten/massenverfahren/`.
 - **Fragen:** Das Modell zählt Reasoning auf `max_tokens`; zu kleine Limits liefern leere Antworten. Antwort-Cache in `antworten.json` je Akte bzw. `cases/antworten_pool.json`; beim Ändern von Prompts löschen. `FRAGE_VOLLTEXT_MAX=0` erzwingt den Suchpfad.
+- **Externe Daten:** Open-Meteo ist kostenlos nur nicht-kommerziell nutzbar. `extern_cache.json` je URL; vergangene Tage laufen nicht ab, zum erneuten Abruf den Eintrag löschen. Ideen sind an den `case.json`-Hash und `ideen_version` gebunden; zum Neueinschätzen `ideen_hash` in `cases/<id>/extern.json` löschen.
 - **Secrets:** `.env` nie committen oder ausgeben; Key nur in `backend/.env`.
 
 ## Orchestrator-Modus

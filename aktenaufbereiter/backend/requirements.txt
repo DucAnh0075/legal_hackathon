@@ -9,3 +9,6 @@ pypdf>=5.1
 json-repair>=0.30
 rapidocr>=3.10
 onnxruntime>=1.20
+requests>=2.32
+astral>=3.2
+airportsdata>=20250101

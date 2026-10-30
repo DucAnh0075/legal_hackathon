@@ -6,13 +6,14 @@ import { Fold } from './components'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
+import { Extern } from './Extern'
 import { FragenFenster, useFragen } from './Fragen'
 import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
 import { LoeschMenu, LoeschDialog, aktenZiel, mvZiel, type LoeschZiel, type MenuStand } from './LoeschMenu'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
-type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
+type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'extern' | 'geschehen' | 'verfahren' | 'board'
 
 const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
@@ -29,6 +30,7 @@ const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseDa
   { group: 'Analyse', items: [
     { id: 'board', label: 'Beweisboard' },
     { id: 'widersprueche', label: 'Widersprüche', count: (d) => d.case.widersprueche.length },
+    { id: 'extern', label: 'Externe Daten' },
   ] },
 ]
 
@@ -252,6 +254,7 @@ export default function App() {
           ) : view === 'geschehen' ? <GeschehenTimeline data={data.case} />
             : view === 'verfahren' ? (<><VerfahrenTimeline data={data.case} /><DataTable table={t.verfahren} /></>)
             : view === 'widersprueche' ? <Contradictions data={data.case} />
+            : view === 'extern' ? <Extern key={caseId} caseId={data.case.id} />
             : view === 'board' ? <div className="page" style={{ paddingBottom: 16 }}><header><h1>Beweisboard</h1><span className="sub">Karten verschieben, anklicken, Doppelklick öffnet das Beweismittel</span></header><Board key={caseId} data={data.case} board={data.board} suspects={data.suspects ?? {}} onSuspects={(suspects) => setData((d) => d?.case.id === data.case.id ? { ...d, suspects } : d)} /></div>
             : <DataTable key={view} table={t[view]} sub={view === 'akte' && data.case.warnungen.length ? `${data.case.warnungen.length} Validierungshinweise` : undefined} />}
         </main>
