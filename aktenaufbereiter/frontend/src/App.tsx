@@ -6,11 +6,12 @@ import { Fold } from './components'
 import { Contradictions } from './Contradictions'
 import { DataTable } from './DataTable'
 import { DocViewer } from './DocViewer'
+import { Fragen, useFragen } from './Fragen'
 import { DocCtx, type OpenDoc } from './ctx'
 import { Start, type JobState } from './Start'
 import { GeschehenTimeline, VerfahrenTimeline } from './Timelines'
 
-type View = 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
+type View = 'fragen' | 'mv' | 'einzelverfahren' | 'start' | 'akte' | 'personen' | 'tatkomplexe' | 'beziehungen' | 'fristen' | 'widersprueche' | 'geschehen' | 'verfahren' | 'board'
 
 const NAV: { group: string; items: { id: View; label: string; count?: (d: CaseData) => number }[] }[] = [
   { group: 'Verzeichnisse', items: [
@@ -68,6 +69,8 @@ export default function App() {
   const [caseId, setCaseId] = useState<string | null>(null)
   const [data, setData] = useState<CaseData | null>(null)
   const [view, setView] = useState<View>('start')
+  const [fragenScope, setFragenScope] = useState<string | null>(null)
+  const fragen = useFragen()
   const [doc, setDoc] = useState<{ id: string; anchor?: string; anchors?: string[] } | null>(null)
   const [dark, setDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
   const [job, setJob] = useState<JobState | null>(null)
@@ -88,9 +91,20 @@ export default function App() {
   useEffect(() => { refresh() }, [refresh])
   useEffect(() => { poolRef.current = pool }, [pool])
 
-  const load = useCallback(async (id: string, v: View = 'akte') => {
-    setData(await api.get(id)); setCaseId(id); setView(v); setDoc(null); refresh()
+  const load = useCallback(async (id: string, v: View = 'akte', preserveView = false) => {
+    const next = await api.get(id)
+    setData(next); setCaseId(id)
+    if (!preserveView) { setView(v); setDoc(null) }
+    refresh()
   }, [refresh])
+
+  const openIn = async (id: string, docId: string, anchors: string[]) => {
+    try {
+      if (id !== caseId) await load(id, 'fragen', true)
+      setDoc({ id: docId, anchors })
+    } catch (error) { setNotice({ text: `Akte konnte nicht geöffnet werden: ${error}`, warn: true }) }
+  }
+  const openFragen = (scope: string | null) => { setFragenScope(scope); setView('fragen'); setDoc(null) }
 
   // Agentenlauf: Fortschritt per SSE, unabhängig von der gerade offenen Ansicht
   const startJob = useCallback((jobId: string, id: string, open = true) => {
@@ -142,15 +156,14 @@ export default function App() {
           <div className="casename">{data?.case.name ?? 'Keine Akte geöffnet'}</div>
           <button className="nav" aria-current={view === 'start' ? 'page' : undefined} onClick={() => { setView('start'); setDoc(null) }}>Übersicht</button>
           <input type="search" className="side-search" aria-label="Akten filtern" placeholder="Akten filtern" value={suche} onChange={(e) => setSuche(e.target.value)} />
-          {einzel.length > 0 && (
-            <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
+          <Fold id="side:aktenpool" forceOpen={filtert} className="side-fold frage-pool-nav" title={<>Aktenpool<span className="n">{einzel.length}</span></>}>
+              <button className="nav" aria-current={view === 'fragen' && fragenScope === null ? 'page' : undefined} onClick={() => openFragen(null)}>Fragen an alle Akten</button>
               {einzel.map((c) => (
-                <button key={c.id} className="nav" title={c.name} aria-current={view !== 'start' && view !== 'mv' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
+                <button key={c.id} className="nav" title={c.name} aria-current={view !== 'start' && view !== 'mv' && view !== 'fragen' && caseId === c.id ? 'page' : undefined} onClick={() => load(c.id)}>
                   <span className="nav-label">{c.name}</span>
                 </button>
               ))}
-            </Fold>
-          )}
+          </Fold>
           {gruppen.length > 0 && (
             <Fold id="side:massenverfahren" forceOpen={filtert} className="side-fold" title={<>Massenverfahren<span className="n">{gruppen.length}</span></>}>
               {gruppen.map((m) => (
@@ -169,6 +182,7 @@ export default function App() {
                   Einzelverfahren<span className="n">{data.case.massenverfahren.verfahren.length}</span>
                 </button>
               )}
+              {g.group === 'Analyse' && <button className="nav" aria-current={view === 'fragen' && fragenScope === caseId ? 'page' : undefined} onClick={() => openFragen(caseId)}>Fragen an diese Akte</button>}
               {g.items.map((i) => (
                 <button key={i.id} className="nav" aria-current={view === i.id ? 'page' : undefined} onClick={() => setView(i.id)}>
                   {i.label}{i.count && <span className="n">{i.count(data)}</span>}
@@ -202,7 +216,10 @@ export default function App() {
               </div>
             )}
           </div>
-          {view === 'mv' && mv ? (
+          {view === 'fragen' ? (
+            <Fragen scope={fragenScope} caseName={fragenScope === caseId ? data?.case.name : fragenScope ?? undefined} canScopeCase={!!data}
+              onScope={(caseScope) => openFragen(caseScope ? caseId : null)} fragen={fragen} onOpen={openIn} />
+          ) : view === 'mv' && mv ? (
             <Massenverfahren key={mv.id} mv={mv} onOpen={(id) => load(id)} job={job} onStart={startJob} />
           ) : view === 'start' || view === 'mv' || !data || !t ? (
             <Start pool={pool} onMassenverfahren={openMv} onOpen={(id) => load(id)} job={job} onStart={startJob} />

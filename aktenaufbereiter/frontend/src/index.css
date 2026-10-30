@@ -356,3 +356,29 @@ table.t { border-collapse: separate; border-spacing: 0; width: 100%; }
   .mv-fold .fold-body { padding-left: 12px; }
   .notice { padding-left: 16px; }
 }
+
+/* Fragen an die Akte */
+.frage-inhalt { max-width: 860px; min-width: 0; overflow-wrap: anywhere; }
+.frage-form { display: grid; gap: 8px; margin: 16px 0 24px; }
+.frage-form label, .frage-meta, .frage-urteil { font-size: 12.5px; color: var(--muted); }
+.frage-form textarea { width: 100%; min-width: 0; resize: vertical; }
+.frage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.frage-actions .btn { white-space: normal; text-align: left; }
+.frage-actions .btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.frage-eintrag { border-top: 1px solid var(--line); padding: 20px 0; }
+.frage-eintrag h2 { font-size: 20px; white-space: pre-wrap; margin-bottom: 14px; }
+.frage-eintrag h3 { font: 600 13px var(--sans); margin-bottom: 6px; }
+.frage-datei { display: grid; gap: 2px; width: 100%; text-align: left; padding: 8px 0; border: 0; border-bottom: 1px solid var(--line); background: none; overflow-wrap: anywhere; }
+.frage-datei:hover { color: var(--accent); }
+.frage-datei:disabled { cursor: default; color: var(--muted); }
+.frage-aussage { margin: 16px 0; }
+.frage-aussage > p, .frage-beleg p { white-space: pre-wrap; margin: 0 0 8px; }
+.frage-beleg { border-left: 2px solid var(--line); margin: 8px 0; padding: 2px 0 2px 12px; }
+.frage-beleg .chip { white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.frage-warn { color: var(--thread); font-weight: 600; }
+.frage-hinweise { margin: 18px 0; }
+.frage-meta p { margin: 6px 0; }
+.frage-eintrag > .frage-actions { margin-top: 12px; }
+@media (max-width: 900px) {
+  .side .frage-pool-nav { display: block; }
+}

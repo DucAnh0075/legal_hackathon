@@ -146,6 +146,12 @@ async def finish(case_id, name, docs, extractions, existing, offset, progress,
         _merge_append_only(gespeichert, existing)
     store.save_case(gespeichert)
     try:
+        from . import suche
+
+        suche.sync(case_id)
+    except Exception as e:
+        progress(f"Suchindex fehlgeschlagen: {e}")
+    try:
         from .review import review
 
         await review(store.load_case(case_id), progress)

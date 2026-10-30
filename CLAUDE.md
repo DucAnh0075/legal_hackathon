@@ -17,6 +17,7 @@ KI-Agent + Web-App für den Strafrichter (Legal Hackathon, Challenge 5): liest A
   - `app/agent.py` Pipeline: Ingest → Extraktion je Dokument → `finish` (Konsolidierung in 4 Teilen → Validierung → `cases/<id>/case.json`)
   - `app/pool.py` Massenverfahren im Aktenpool: Fallprofil je Akte (`profil.json`) → Gruppierung (`cases/massenverfahren.json`, ID `mv-<früheste Akte>`)
   - `app/sammelakte.py` Sammelakte `sammel-<…>` aus einer Gruppe: Dokumente je Einzelverfahren als A01…, B01…, Extraktionen übernommen, dann `agent.finish`
+  - `app/suche.py` lokaler Zeilenindex (SQLite FTS5, `cases/suche.sqlite`); `app/frage.py` Fragen an Akte oder Pool: Treffer → Antwort → deterministische Belegprüfung (`pruefen`) → inhaltliche Prüfung
   - `app/llm.py` OpenRouter-Client (JSON-Schema, Vision, Retry, `json_repair`)
   - `app/prompts.py`, `app/schemas.py` (Pydantic = Datenmodell), `app/tables.py` (Vorlagenspalten), `app/export_xlsx.py`, `app/main.py` (API + SSE)
 - `aktenaufbereiter/frontend/` Vite + React + TS (`@xyflow/react` fürs Beweisboard); Dev-Proxy `/api` → `:8000`
@@ -29,6 +30,7 @@ cp .env.example .env                                   # OPENROUTER_API_KEY eint
 .venv/bin/uvicorn app.main:app --port 8000
 .venv/bin/python -m app.cli process "<ordner>" --case <id> --name "<name>"
 .venv/bin/python -m app.cli ingest "<ordner>"          # nur Einlesen, ohne Modell
+.venv/bin/python -m app.cli frage "<frage>" [--case <id>]   # Frage an Akte oder alle Akten
 .venv/bin/python -m app.cli pool                       # Massenverfahren im Pool erkennen
 .venv/bin/python -m app.cli sammelakte mv-<id>         # Sammelakte erstellen/ergänzen
 cd ../frontend && npm run dev                          # http://localhost:5173
@@ -42,6 +44,7 @@ Backend nach Änderungen an `.env` oder Python-Code neu starten (kein Reload).
 - **Cache:** `cases/<id>/extraktionen/` wird wiederverwendet; zum Neulesen eines Dokuments dessen JSON löschen.
 - **Konsolidierung:** große JSON-Antworten scheitern; deshalb in Teilen (entities → events/statements/rest parallel).
 - **Pool:** Profile sind an den `case.json`-Hash gebunden; zum Neuprofilieren `cases/<id>/profil.json` löschen. Die Gruppen-ID bleibt über `massenverfahren.json` stabil, deshalb diese Datei nicht löschen, wenn schon eine Sammelakte existiert. Testakten: `aktenaufbereiter/testdaten/massenverfahren/`.
+- **Fragen:** Das Modell zählt Reasoning auf `max_tokens`; zu kleine Limits liefern leere Antworten. Antwort-Cache in `antworten.json` je Akte bzw. `cases/antworten_pool.json`; beim Ändern von Prompts löschen. `FRAGE_VOLLTEXT_MAX=0` erzwingt den Suchpfad.
 - **Secrets:** `.env` nie committen oder ausgeben; Key nur in `backend/.env`.
 
 ## Orchestrator-Modus

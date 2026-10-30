@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 import uuid
 from pathlib import Path
@@ -12,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from . import board, pool, review, sammelakte, store, view
+from . import board, frage, pool, review, sammelakte, store, suche, view
 from .agent import Progress, run
 from .export_xlsx import export
 from .tables import build
@@ -34,7 +35,7 @@ def _case(case_id: str):
 async def _job(job: str, work: Callable[[Progress], Awaitable]) -> None:
     q = jobs[job]
     try:
-        await work(lambda m: q.put_nowait({"msg": m}))
+        await work(lambda m: q.put_nowait(m if isinstance(m, dict) else {"msg": m}))
         q.put_nowait({"done": True})
     except Exception as e:  # noqa: BLE001
         q.put_nowait({"error": str(e)})
@@ -179,3 +180,33 @@ def export_xlsx(case_id: str):
     return Response(export(c, store.get_annotations(case_id)),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{case_id}.xlsx"'})
+
+
+@app.on_event("startup")
+async def suchindex_starten():
+    async def aufbauen():
+        try:
+            await asyncio.to_thread(suche.sync)
+        except Exception:
+            logging.getLogger(__name__).exception("Suchindex fehlgeschlagen")
+
+    asyncio.create_task(aufbauen())
+
+
+class FrageIn(BaseModel):
+    frage: str
+    case_id: str | None = None
+    verlauf: list[dict] = []
+
+
+@app.post("/api/fragen")
+async def fragen(body: FrageIn):
+    if not body.frage.strip() or len(body.frage) > 2000:
+        raise HTTPException(400, "Frage muss 1 bis 2000 Zeichen enthalten")
+    if body.case_id is not None:
+        try:
+            if store.load_case(body.case_id) is None:
+                raise ValueError("Akte nicht gefunden")
+        except (ValueError, OSError):
+            raise HTTPException(404, "Akte nicht gefunden") from None
+    return {"job": await _start(lambda progress: frage.beantworten(body.frage, body.case_id, body.verlauf, emit=progress))}

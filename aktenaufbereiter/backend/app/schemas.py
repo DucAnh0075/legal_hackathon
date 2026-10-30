@@ -309,6 +309,46 @@ class MassenverfahrenInfo(BaseModel):
     verfahren: list[Einzelverfahren] = []
 
 
+# ---- Fragen an die Akte -----------------------------------------------------
+
+class AntwortBeleg(BaseModel):
+    case_id: str = ""
+    doc_id: str = ""
+    line: str  # Zeilenanker, z. B. "A06:L03"
+    zitat: str  # wörtlich aus dieser Zeile
+    bezug: Literal["stuetzt", "widerspricht", "erwaehnt"] = "stuetzt"
+    blatt: str | None = None
+
+
+class AntwortAussage(BaseModel):
+    text: str
+    belege: list[AntwortBeleg] = []
+    urteil: Literal["traegt", "traegt_teilweise", "traegt_nicht"] | None = None  # inhaltliche Prüfung
+    grund: str | None = None
+
+
+class AktenAntwort(BaseModel):
+    status: Literal["beantwortet", "teilweise", "nicht_in_akte", "ausserhalb"]
+    aussagen: list[AntwortAussage] = []
+    nachfragen: list[str] = []
+    verworfen: int = 0  # Belege/Aussagen, die die deterministische Prüfung nicht bestanden haben
+
+
+class Suchplan(BaseModel):
+    begriffe: list[str] = []  # Suchwörter samt Synonymen
+    dokumente: list[str] = []  # relevante Dokument-IDs, im Pool "fall|A01"
+
+
+class Aussagenpruefung(BaseModel):
+    index: int
+    urteil: Literal["traegt", "traegt_teilweise", "traegt_nicht"]
+    grund: str = ""
+
+
+class AntwortPruefung(BaseModel):
+    pruefungen: list[Aussagenpruefung] = []
+
+
 class Case(Consolidation):
     id: str
     name: str

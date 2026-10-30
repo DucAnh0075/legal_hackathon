@@ -7,11 +7,34 @@ from .ingest import assign_blatt, ingest
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["ingest", "process", "review", "board", "pool", "sammelakte"])
+    ap.add_argument("cmd", choices=["ingest", "process", "review", "board", "pool", "sammelakte", "frage"])
     ap.add_argument("folder", nargs="?")
-    ap.add_argument("--case", default="fall")
+    ap.add_argument("--case", default=None)
     ap.add_argument("--name")
     args = ap.parse_args()
+    if args.cmd == "frage":
+        import asyncio
+        import json
+
+        from . import frage
+
+        if not args.folder or not args.folder.strip() or len(args.folder) > 2000:
+            ap.error("Frage mit 1 bis 2000 Zeichen erforderlich")
+        zusatz = {}
+
+        def ereignis(ev):
+            zusatz.update(ev)
+            print(f"[{ev['ms']} ms] " + json.dumps({k: v for k, v in ev.items() if k != "ms"}, ensure_ascii=False))
+
+        antwort = asyncio.run(frage.beantworten(args.folder, args.case, [], emit=ereignis))
+        print(f"Status: {antwort.status}")
+        for a in antwort.aussagen:
+            print(f"- {a.text} [{a.urteil or 'ungeprüft'}] {a.grund or ''}")
+            for b in a.belege:
+                print(f"  {b.case_id}|{b.line} ({b.blatt}): {b.zitat} [{b.bezug}]")
+        for titel, feld in (("Dateien", "dateien"), ("Hinweise", "hinweise")):
+            print(titel + ": " + json.dumps(zusatz.get(feld, []), ensure_ascii=False, indent=2))
+        return
     if args.cmd == "sammelakte":
         import asyncio
 
@@ -44,7 +67,7 @@ def main() -> None:
 
         from . import board, review, store, view
 
-        case = store.load_case(args.case)
+        case = store.load_case(args.case or "fall")
         if case is None:
             ap.error("Fall nicht gefunden")
         view.apply(case, review.load(case.id))
@@ -58,7 +81,7 @@ def main() -> None:
         from . import store
         from .review import art_beziehung, art_widerspruch, review
 
-        case = store.load_case(args.case)
+        case = store.load_case(args.case or "fall")
         if case is None:
             ap.error("Fall nicht gefunden")
         rv = asyncio.run(review(case))
@@ -73,7 +96,7 @@ def main() -> None:
 
         from .agent import run
 
-        asyncio.run(run(Path(args.folder), args.case, args.name))
+        asyncio.run(run(Path(args.folder), args.case or "fall", args.name))
         return
     docs, sammel, n = ingest(Path(args.folder), set())
     assign_blatt(docs)

@@ -41,12 +41,12 @@ def _extract_json(text: str) -> str:
     return text[s : e + 1] if s != -1 else text
 
 
-async def _create(model: str, messages: list, max_tokens: int):
+async def _create(model: str, messages: list, max_tokens: int, effort: str | None = None):
     for attempt in range(4):
         try:
             return await client().chat.completions.create(
                 model=model, messages=messages, max_tokens=max_tokens, temperature=0,
-                response_format={"type": "json_object"}, extra_body={"reasoning": {"exclude": True}},
+                response_format={"type": "json_object"}, extra_body={"reasoning": {"exclude": True, **({"effort": effort} if effort else {})}},
             )
         except APIStatusError as e:
             if e.status_code == 404 and "guardrail" in str(e).lower():
@@ -60,13 +60,13 @@ async def _create(model: str, messages: list, max_tokens: int):
 
 
 async def ask(model: str, system: str, user: str, schema: type[T], images: list[Path] | None = None,
-              retries: int = 2, max_tokens: int = 16000) -> T:
+              retries: int = 2, max_tokens: int = 16000, effort: str | None = None) -> T:
     content: list[dict] = [{"type": "text", "text": user}]
     content += [_image_part(p) for p in images or []]
     messages = [{"role": "system", "content": system}, {"role": "user", "content": content}]
     last: Exception | None = None
     for _ in range(retries + 1):
-        resp = await _create(model, messages, max_tokens)
+        resp = await _create(model, messages, max_tokens, effort)
         raw = _extract_json(resp.choices[0].message.content or "")
         try:
             try:

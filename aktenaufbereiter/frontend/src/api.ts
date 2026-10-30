@@ -40,11 +40,26 @@ export type CaseData = { case: Case; board?: BoardStruktur; suspects: Record<str
 export type Marks = { fmt: string; page: number | null; boxes: { page: number; x: number; y: number; w: number; h: number }[]; found: string[]; missing: string[] }
 export type CaseInfo = { sammelakte?: boolean; id: string; name: string; dokumente: number; personen: number; widersprueche: number }
 
+export type Treffer = { case_id: string; case_name: string; doc_id: string; doc_title: string; blatt: string; anchor: string; text: string }
+export type Kontext = { art: 'volltext' | 'suche'; zeichen: number; stellen: number; dokumente: number; dokumente_gesamt: number }
+export type Beleg = { case_id: string; doc_id: string; line: string; zitat: string; bezug: 'stuetzt' | 'widerspricht' | 'erwaehnt'; blatt?: string | null }
+export type Urteil = 'traegt' | 'traegt_teilweise' | 'traegt_nicht'
+export type Aussage = { text: string; belege: Beleg[]; urteil?: Urteil | null; grund?: string | null }
+export type AktenAntwort = { status: 'beantwortet' | 'teilweise' | 'nicht_in_akte' | 'ausserhalb'; aussagen: Aussage[]; nachfragen: string[]; verworfen: number }
+export type Datei = { case_id: string; case_name: string; doc_id: string; title: string; blatt: string; anchors: string[] }
+export type Hinweis = { art: 'widerspruch' | 'frist'; case_id: string; id: string; text: string; anchors: string[] }
+export type FragenEvent = {
+  ms: number; treffer?: Treffer[]; kontext?: Kontext; antwort?: AktenAntwort; dateien?: Datei[]; hinweise?: Hinweis[]; aus_cache?: boolean
+  pruefung?: { index: number; urteil: Urteil; grund: string }[] | null; pruef_fehler?: string; msg?: string; done?: boolean; error?: string
+}
+
 const j = async <T,>(r: Response): Promise<T> => {
   if (!r.ok) throw new Error((await r.text()) || r.statusText)
   return r.json()
 }
 export const api = {
+  frage: (frage: string, caseId: string | null, verlauf: { frage: string; antwort: string }[]) =>
+    fetch('/api/fragen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frage, case_id: caseId, verlauf }) }).then((r) => j<{ job: string }>(r)),
   pool: () => fetch('/api/pool').then((r) => j<Pool>(r)),
   refreshPool: () => fetch('/api/pool/refresh', { method: 'POST' }).then((r) => j<{ job: string }>(r)),
   createSammelakte: (mvId: string) => fetch(`/api/pool/${encodeURIComponent(mvId)}/sammelakte`, { method: 'POST' }).then((r) => j<{ job: string; case_id: string }>(r)),
