@@ -53,6 +53,15 @@ export type FragenEvent = {
   pruefung?: { index: number; urteil: Urteil; grund: string }[] | null; pruef_fehler?: string; msg?: string; done?: boolean; error?: string
 }
 
+export type ExternWert = { label: string; wert: string; link?: string | null }
+export type ExternIdee = { id: string; art: string; anlass: string; anker: string[]; abfragen: { parameter: Record<string, string>; anker: string[] }[] }
+export type ExternAbruf = {
+  tool: string; parameter: Record<string, string>; status: 'ok' | 'leer' | 'fehler' | 'verworfen'; grund?: string | null
+  fundstellen: Fundstelle[]; herkunft: 'akte' | 'eingabe'; werte: ExternWert[]; quelle?: string | null; url?: string | null; abgerufen_am?: string | null; hinweis?: string | null
+}
+export type ExternBericht = { id: string; anfrage: string; erstellt_am: string; abrufe: ExternAbruf[]; hinweis?: string | null }
+export type ExternStand = { berichte: ExternBericht[]; laeuft: boolean }
+
 const j = async <T,>(r: Response): Promise<T> => {
   if (!r.ok) throw new Error((await r.text()) || r.statusText)
   return r.json()
@@ -90,6 +99,11 @@ export const api = {
     return `/api/cases/${id}/files/${doc}${q ? `?${q}` : ''}`
   },
   xlsxUrl: (id: string) => `/api/cases/${id}/export.xlsx`,
+  extern: (id: string) => fetch(`/api/cases/${id}/extern`).then((r) => j<ExternStand>(r)),
+  externIdeen: (id: string) => fetch(`/api/cases/${id}/extern/ideen`).then((r) => j<{ ideen: ExternIdee[] }>(r)),
+  externAbruf: (id: string, auswahl: { tool: string; parameter: Record<string, string>; anker: string[] }[], anfrage: string) =>
+    fetch(`/api/cases/${id}/extern/abruf`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auswahl, anfrage }) }).then((r) => j<{ job: string }>(r)),
+  externEntfernen: (id: string, berichtId: string) => fetch(`/api/cases/${id}/extern/${encodeURIComponent(berichtId)}`, { method: 'DELETE' }).then((r) => j<unknown>(r)),
 }
 
 export const evDates = (e: Ev, docs: Doc[]) => {
