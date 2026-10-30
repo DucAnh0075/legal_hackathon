@@ -22,7 +22,7 @@ Der Aktenaufbereiter liest gemischte Aktenbestandteile und ordnet sie. Jede Anga
 Dateien → Ingest → Extraktion je Dokument → Konsolidierung → Ankerprüfung → case.json → Web-App
 ```
 
-Das Modell liest und strukturiert, der Code prüft. `validate.py` gleicht alle Fundstellen mit den echten Zeilen ab, unbelegte Angaben werden nicht übernommen.
+Das Modell liest und strukturiert, der Code prüft. `validate.py` gleicht alle Fundstellen mit den echten Zeilen ab, markiert ungültige als unklar und weist fehlende als Warnung aus.
 
 Fragen laufen je nach Aktengröße unterschiedlich: Bis 60.000 Zeichen liest das Modell den ganzen Text. Darüber plant es Suchbegriffe, ein lokaler Volltextindex liefert die Treffer, und nur diese Stellen samt Nachbarzeilen gehen ans Modell.
 
